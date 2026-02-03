@@ -1,237 +1,321 @@
-# @blockrun/openclaw-provider
+# @blockrun/openclaw-x402
 
-BlockRun LLM provider plugin for [OpenClaw](https://github.com/nicepkg/openclaw). Access 30+ AI models — GPT-5, Claude, Gemini, DeepSeek, Grok — with automatic [x402](https://www.x402.org/) USDC micropayments on Base.
+Paid skills for OpenClaw. Skill creators earn money. End users get premium capabilities. Powered by [x402](https://www.x402.org/) micropayments.
 
-## Why This Exists
+## The Problem
 
-### The Problem
+OpenClaw has 3,000+ community skills on ClawHub. All free. No way for creators to earn money from their work.
 
-OpenClaw is an open-source AI agent framework (150K+ GitHub stars) that lets operators run AI-powered bots across WhatsApp, Telegram, Discord, Slack, and more. Operators need to connect their bots to LLM providers — but every provider requires API keys, billing accounts, credit card signups, and manual credit management.
+Skills that fetch live data, run analysis, or call APIs cost real money to operate. Creators either eat the cost or don't build them. The result: most skills are simple prompt wrappers. The high-value skills — real-time crypto analysis, premium data feeds, AI-powered tools — don't exist because there's no business model.
 
-For crypto-native operators, this friction is unacceptable. They want:
-- **No accounts** — just a wallet
-- **No credit cards** — just USDC
-- **No prepaid credits** — pay per request, in real time
-- **No vendor lock-in** — switch models freely
+OpenClaw maintainers have explicitly said payment features should be built as third-party extensions, not core ([Issue #3465](https://github.com/openclaw/openclaw/issues/3465)). Nobody has built it yet.
 
-### The Solution: x402 Micropayments
+## The Solution
 
-This plugin connects OpenClaw to [BlockRun](https://blockrun.ai), an LLM API gateway that accepts [x402 payments](https://www.x402.org/) — an HTTP-native payment protocol by Coinbase where every API call is paid for with a USDC microtransaction on Base.
+BlockRun turns any skill into a paid API endpoint. Creators submit their code, set a price, and earn USDC on every call. End users pay per execution — no subscriptions, no API keys, no accounts (for crypto users).
 
-The flow:
+### For Skill Creators
 
 ```
-Your OpenClaw bot sends a chat completion request
-  → Local proxy intercepts it
-  → Forwards to BlockRun API
-  → BlockRun returns HTTP 402 (Payment Required) with price
-  → Proxy auto-signs a USDC payment with your wallet
-  → Retries the request with payment proof
-  → BlockRun verifies, streams the response back
-  → Your bot gets the completion as if nothing happened
+1. Submit your skill code + USDC wallet address to BlockRun
+2. Set your price per execution ($0.01 - $10.00)
+3. BlockRun hosts and runs your code server-side
+4. Every time someone calls your skill, you earn money
+5. Payouts in USDC on Base (instant, no minimums)
 ```
 
-**No API keys. No accounts. No invoices. Just a wallet with USDC on Base.**
+Your skill's SKILL.md goes on ClawHub as usual (free). It tells the agent how to call your BlockRun API endpoint. The execution is what costs money.
 
-### The Bigger Picture: Two-Sided Payment Layer
+### For End Users (OpenClaw Operators)
 
-This plugin is **Phase 1** of a two-sided payment architecture:
+```bash
+# Install the x402 extension
+openclaw extension install @blockrun/openclaw-x402
+
+# Configure your wallet (or use Stripe)
+export BLOCKRUN_WALLET_KEY=0x...
+
+# That's it. Your agent can now use paid skills.
+```
+
+When your agent calls a paid skill:
+- **x402 (crypto)**: Extension auto-signs a USDC micropayment. No account needed — payment IS authentication.
+- **Stripe (fiat)**: Pre-fund a balance at blockrun.ai, use an API key.
+
+## How It Works
 
 ```
-                    Phase 1 (this plugin)          Phase 2 (coming soon)
-                    ─────────────────────          ─────────────────────
-End Users ──pay──▶ Operator's Bot ──x402──▶ BlockRun API ──▶ LLM Providers
-  (Stripe/x402)       (earns spread)         (this plugin)    (GPT-5, Claude, etc.)
+┌─────────────────────────────────────────────────────────────────┐
+│                          ClawHub                                │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  SKILL.md (FREE)                                        │   │
+│  │  "To analyze crypto, call:                               │   │
+│  │   POST api.blockrun.ai/skills/crypto-analyst/execute"    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     End User's Agent                            │
+│  ┌──────────────┐    ┌──────────────────────────────────────┐   │
+│  │  OpenClaw     │───▶│  @blockrun/openclaw-x402 extension   │   │
+│  │  Agent        │    │  (auto-handles payment)              │   │
+│  └──────────────┘    └──────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                    x402 payment or API key
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     BlockRun Platform                           │
+│                                                                 │
+│  1. Verify payment (x402 USDC or Stripe balance)                │
+│  2. Execute skill code server-side                              │
+│  3. Return fresh results to agent                               │
+│  4. Route payment: 80-85% → creator, 15-20% → BlockRun         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-- **Phase 1** (this repo): Operator pays BlockRun for LLM usage via x402. One plugin install, 30+ models.
-- **Phase 2** (planned): End users pay operators for bot access via x402 or Stripe. Operators earn the spread.
+## Why Per-Execution, Not Per-Download?
+
+Static prompts and data can be copied once and never paid for again. That's why app store models don't work for skills.
+
+BlockRun skills sell **execution**, not content:
+
+| What's Free (SKILL.md on ClawHub) | What's Paid (BlockRun API) |
+|-----------------------------------|---------------------------|
+| Prompt instructions | Real-time data fetch (crypto prices, news) |
+| Tool usage guide | LLM inference (each call costs tokens) |
+| Skill description | Computation (image gen, analysis, code exec) |
+| Install instructions | API aggregation (combines multiple paid APIs) |
+
+Each call produces fresh, unique results. A crypto analysis from 10 minutes ago is already stale. You can't "copy" a live computation.
+
+## Skill Categories
+
+| Category | Example | Why It's Paid per Call |
+|----------|---------|----------------------|
+| Real-time data | Crypto market analysis | Fetches live prices, runs TA indicators |
+| AI generation | Image/video creation | GPU compute per generation |
+| Premium APIs | Financial data feeds | Upstream API costs per call |
+| Code execution | Data pipeline runner | Server compute per run |
+| LLM-powered | Research assistant | Token costs per query |
+
+## Authentication
+
+### x402 (Crypto Users) — No Auth Needed
+
+Payment IS authentication. The USDC payment signature proves identity.
+
+```
+Agent → POST /skills/slug → 402 → extension signs USDC → retry with payment → result
+Identity = wallet address (extracted from payment signature)
+```
+
+### Stripe (Fiat Users) — API Key
+
+```
+User creates account at blockrun.ai → funds via Stripe → gets API key
+Agent sends API key in header → BlockRun deducts from balance → result
+Identity = API key / BlockRun account
+```
+
+Both paths converge at the same execution endpoint. BlockRun accepts either valid x402 payment header OR valid API key with sufficient balance.
 
 ## Architecture
 
-### Why a Local Proxy?
+### Three Components
 
-OpenClaw's LLM engine (pi-ai) speaks standard OpenAI-format HTTP to providers. It doesn't know about x402. Rather than forking pi-ai, we run a lightweight local HTTP proxy that:
+1. **BlockRun Skills API** (backend) — Hosts skill code, handles payments, routes payouts
+2. **OpenClaw x402 Extension** (npm package) — Third-party extension that gives agents ability to pay
+3. **Skill Creator Dashboard** (web UI) — Submit and manage skills at blockrun.ai
 
-1. Receives standard OpenAI requests from pi-ai at `http://127.0.0.1:{port}/v1/...`
-2. Forwards them to `https://api.blockrun.ai/api/v1/...`
-3. Handles the x402 payment dance (402 → sign → retry) transparently
-4. Streams the response back to pi-ai
-
-This means **zero changes to OpenClaw core**. The proxy is invisible to pi-ai — it just sees a fast local OpenAI-compatible API.
-
-### Streaming Support
-
-x402 is a **gated API protocol**: the server verifies the payment commitment *before* granting access, then streams the full response, then settles the payment. This means streaming works naturally — the 402 → sign → retry happens once on the initial request, then the response body streams through without buffering.
-
-### Source Files
+### Skills API
 
 ```
-src/
-├── index.ts      # Plugin entry point — register() and activate() lifecycle
-├── provider.ts   # ProviderPlugin — registers "blockrun" in OpenClaw's provider system
-├── proxy.ts      # Local HTTP proxy with x402 payment handling via @x402/fetch
-├── models.ts     # 26 model definitions (GPT-5, Claude, Gemini, DeepSeek, Grok)
-├── auth.ts       # Auth methods — wallet key input or env var
-└── types.ts      # Local type definitions (duck-typed to match OpenClaw's plugin API)
+POST   /api/skills/register        — Creator submits skill code + wallet + pricing
+GET    /api/skills/directory        — Browse/search available paid skills
+POST   /api/skills/:slug/execute    — Execute a paid skill (x402 or API key)
+GET    /api/skills/:slug/info       — Skill metadata + pricing
 ```
 
-### Key Dependencies
+Hosted in BlockRun's existing Next.js app. Reuses existing x402 server code for payment verification and settlement.
 
-| Package | Purpose |
-|---------|---------|
-| `@x402/fetch` | Wraps native `fetch` to auto-handle 402 payment responses |
-| `@x402/evm` | EVM signer for x402 — signs USDC TransferWithAuthorization via EIP-712 |
-| `viem` | Ethereum account management — `privateKeyToAccount` |
+### Database Schema
 
-## Installation
+```sql
+-- Skill registry
+CREATE TABLE skills (
+  id UUID PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  creator_wallet TEXT NOT NULL,        -- Creator's USDC address on Base
+  title TEXT NOT NULL,
+  description TEXT,
+  price_usd DECIMAL(10,6) NOT NULL,    -- Price per execution
+  content JSONB NOT NULL,              -- Skill code, config, metadata
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Execution log
+CREATE TABLE skill_executions (
+  id UUID PRIMARY KEY,
+  skill_id UUID REFERENCES skills(id),
+  payer_address TEXT NOT NULL,          -- Who paid (wallet or account)
+  amount_usd DECIMAL(10,6),
+  tx_hash TEXT,                         -- On-chain settlement hash
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Creator payouts
+CREATE TABLE payouts (
+  id UUID PRIMARY KEY,
+  creator_wallet TEXT NOT NULL,
+  amount_usd DECIMAL(10,6),
+  tx_hash TEXT,
+  settled_at TIMESTAMPTZ
+);
+
+-- Stripe user balances
+CREATE TABLE user_balances (
+  id UUID PRIMARY KEY,
+  api_key TEXT UNIQUE NOT NULL,
+  email TEXT,
+  balance_usd DECIMAL(10,6) DEFAULT 0,
+  total_deposited DECIMAL(10,6) DEFAULT 0,
+  total_spent DECIMAL(10,6) DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### x402 Extension
+
+```
+packages/openclaw-x402/
+├── src/
+│   ├── index.ts        # Extension entry point (registers tools)
+│   ├── tools.ts        # x402_call + blockrun_skills tool definitions
+│   ├── wallet.ts       # Wallet management (privateKey or auto-create)
+│   └── types.ts        # OpenClaw extension type definitions
+├── package.json
+└── README.md
+```
+
+**Tools provided to the agent**:
+1. `x402_call` — Call any x402-protected API endpoint with automatic USDC payment
+2. `blockrun_skills` — Search BlockRun's paid skill directory by keyword/category
+
+**Configuration**:
+```json
+{
+  "extensions": {
+    "entries": {
+      "@blockrun/openclaw-x402": {
+        "enabled": true,
+        "config": {
+          "walletKey": "0x...",
+          "maxPaymentPerCall": "1.00"
+        }
+      }
+    }
+  }
+}
+```
+
+### The x402 Payment Flow (Per Request)
+
+```
+Agent                   BlockRun API                    On-Chain (Base)
+  │                         │                              │
+  │── POST /skills/slug ──▶│                              │
+  │                         │                              │
+  │◀── 402 + price ────────│                              │
+  │                         │                              │
+  │ [x402 extension signs   │                              │
+  │  USDC TransferWithAuth] │                              │
+  │                         │                              │
+  │── POST + X-PAYMENT ──▶│                              │
+  │                         │── verify payment ──────────▶│
+  │                         │◀── valid ──────────────────│
+  │                         │                              │
+  │                         │ [execute skill code]         │
+  │                         │                              │
+  │◀── 200 + results ──────│                              │
+  │                         │── settle on-chain ─────────▶│
+  │                         │   (85% → creator wallet)     │
+```
+
+## Revenue Model
+
+```
+End user pays $0.05 per skill execution
+  → BlockRun keeps $0.0075-0.01 (15-20% platform fee)
+  → Skill creator gets $0.04-0.0425 (80-85% payout)
+
+If the skill also uses BlockRun LLM:
+  → Additional LLM revenue on top of platform fee
+
+Volume model:
+  1,000 skill creators × 100 calls/day × $0.05 avg = $5,000/day = $150K/month
+  BlockRun take at 15%: ~$22.5K/month
+```
+
+## Market Context
+
+- **OpenClaw**: 156K GitHub stars, 3,000+ skills, ~30 new issues/hour
+- **ClawHub**: Official skill registry, no monetization
+- **Community demand**: Issue #757 "Decentralized Marketplace for AI Skills", Issue #3465 "x402 payment extension", Issue #7951 "payment integration"
+- **Maintainer stance**: "Make it a third-party extension" — they won't build payments in core
+- **Competition**: zauth submitted x402 PR, got rejected. Nobody else is building this.
+
+## Quick Start
+
+### Skill Creator
 
 ```bash
-# Install the plugin in your OpenClaw workspace
-openclaw plugin install @blockrun/openclaw-provider
+# Submit a skill via CLI (coming soon)
+blockrun skills submit ./my-skill \
+  --wallet 0x... \
+  --price 0.05
+
+# Or via the dashboard
+open https://blockrun.ai/skills/submit
 ```
 
-Or add to your OpenClaw config manually:
-
-```yaml
-# openclaw.yaml
-plugins:
-  - "@blockrun/openclaw-provider"
-```
-
-## Configuration
-
-### Option 1: Environment Variable (Recommended)
+### End User
 
 ```bash
+# Install extension
+openclaw extension install @blockrun/openclaw-x402
+
+# Option A: Crypto (no account needed)
 export BLOCKRUN_WALLET_KEY=0x...your_private_key...
+
+# Option B: Fiat (create account at blockrun.ai, fund via Stripe)
+export BLOCKRUN_API_KEY=br_...
+
+# Done — your agent can now use any paid skill on ClawHub
 ```
-
-The plugin auto-detects the env var on startup.
-
-### Option 2: OpenClaw Provider Wizard
-
-```bash
-openclaw provider add blockrun
-```
-
-This prompts for your wallet private key and stores it securely in OpenClaw's credential system.
-
-### Option 3: Plugin Config
-
-```yaml
-# openclaw.yaml
-plugins:
-  - id: "@blockrun/openclaw-provider"
-    config:
-      walletKey: "0x..."
-```
-
-### Setting the Model
-
-```bash
-# Use any BlockRun model
-openclaw config set model openai/gpt-5.2
-openclaw config set model anthropic/claude-sonnet-4
-openclaw config set model google/gemini-2.5-pro
-openclaw config set model deepseek/deepseek-chat
-```
-
-## Available Models
-
-| Model | Input ($/1M tokens) | Output ($/1M tokens) | Context | Reasoning |
-|-------|---------------------|----------------------|---------|-----------|
-| **OpenAI** | | | | |
-| openai/gpt-5.2 | $1.75 | $14.00 | 400K | Yes |
-| openai/gpt-5-mini | $0.25 | $2.00 | 200K | |
-| openai/gpt-5-nano | $0.05 | $0.40 | 128K | |
-| openai/gpt-4.1 | $2.00 | $8.00 | 128K | |
-| openai/gpt-4.1-mini | $0.40 | $1.60 | 128K | |
-| openai/gpt-4o | $2.50 | $10.00 | 128K | |
-| openai/o3 | $2.00 | $8.00 | 200K | Yes |
-| openai/o4-mini | $1.10 | $4.40 | 128K | Yes |
-| **Anthropic** | | | | |
-| anthropic/claude-opus-4.5 | $15.00 | $75.00 | 200K | Yes |
-| anthropic/claude-sonnet-4 | $3.00 | $15.00 | 200K | Yes |
-| anthropic/claude-haiku-4.5 | $1.00 | $5.00 | 200K | |
-| **Google** | | | | |
-| google/gemini-2.5-pro | $1.25 | $10.00 | 1M | Yes |
-| google/gemini-2.5-flash | $0.15 | $0.60 | 1M | |
-| google/gemini-3-pro-preview | $2.00 | $12.00 | 1M | Yes |
-| **DeepSeek** | | | | |
-| deepseek/deepseek-chat | $0.28 | $0.42 | 128K | |
-| deepseek/deepseek-reasoner | $0.28 | $0.42 | 128K | Yes |
-| **xAI** | | | | |
-| xai/grok-3 | $3.00 | $15.00 | 131K | Yes |
-| xai/grok-3-mini | $0.30 | $0.50 | 131K | |
-
-Full list: 26 models across 5 providers. See `src/models.ts` for details.
-
-## How It Works (Technical)
-
-### Plugin Lifecycle
-
-1. **`register(api)`** — Called when OpenClaw loads the plugin. Registers the "blockrun" provider with model definitions and auth methods.
-
-2. **`activate(api)`** — Called when the plugin activates. Resolves the wallet key (from plugin config, env var, or stored credential), starts the local x402 proxy on a random port, and updates the provider's `baseUrl` to point to the proxy.
-
-### x402 Payment Flow (per request)
-
-```
-pi-ai                    Proxy (localhost)              BlockRun API
-  │                           │                              │
-  │── POST /v1/chat/comp ───▶│                              │
-  │                           │── POST /v1/chat/comp ──────▶│
-  │                           │                              │
-  │                           │◀── 402 Payment Required ────│
-  │                           │    (price: $0.002 USDC)      │
-  │                           │                              │
-  │                           │ [sign EIP-712 USDC auth]     │
-  │                           │                              │
-  │                           │── POST + X-PAYMENT header ─▶│
-  │                           │                              │
-  │                           │◀── 200 OK (streaming) ──────│
-  │◀── 200 OK (streaming) ───│                              │
-  │    [tokens stream through]│                              │
-```
-
-### Type Strategy
-
-OpenClaw's plugin system uses duck typing — it matches object shapes at runtime rather than requiring explicit type imports. This plugin defines its own local types in `src/types.ts` that match OpenClaw's expected shapes (`ProviderPlugin`, `ModelDefinitionConfig`, etc.), avoiding dependency on internal OpenClaw paths that aren't part of the public plugin SDK export.
-
-## Wallet Setup
-
-You need an EVM wallet with USDC on Base:
-
-1. **Create or use an existing wallet** — any EVM wallet works (MetaMask, Coinbase Wallet, etc.)
-2. **Export the private key** — the 0x-prefixed 64-character hex string
-3. **Fund with USDC on Base** — bridge USDC to Base network, or buy directly on Base
-4. **Set the key** — via env var, wizard, or config (see Configuration above)
-
-Typical costs: a single GPT-4o chat completion costs ~$0.001-0.01 in USDC. $10 of USDC gets you thousands of requests.
 
 ## Development
 
 ```bash
-# Install dependencies
 npm install
-
-# Build
 npm run build
-
-# Watch mode
-npm run dev
-
-# Type check
+npm run dev        # Watch mode
 npm run typecheck
 ```
 
 ## Roadmap
 
-- [x] **Phase 1**: Provider plugin — OpenClaw operators use BlockRun models via x402
-- [ ] **Phase 2**: Billing plugin — operators charge end users (x402 + Stripe)
-- [ ] **Phase 3**: Reference bot — self-hosted crypto analyst on Telegram
-- [ ] **Phase 4**: Community launch — npm publish, ClawHub listing, OpenClaw PR
+- [x] Phase 1: OpenClaw LLM provider plugin (x402 proxy for BlockRun models)
+- [ ] Phase 2: Skills API backend (register, execute, pay, payout)
+- [ ] Phase 3: OpenClaw x402 extension (agent tool for paying skills)
+- [ ] Phase 4: First paid skill (proof of concept, built by us)
+- [ ] Phase 5: Creator dashboard (web UI at blockrun.ai)
+- [ ] Phase 6: Stripe fiat on-ramp
+- [ ] Phase 7: Community launch (ClawHub listing, npm publish, GitHub issues)
 
 ## License
 

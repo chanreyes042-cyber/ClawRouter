@@ -1,7 +1,7 @@
 {
-  "name": "@blockrun/openclaw-provider",
+  "name": "@blockrun/openclaw-x402",
   "version": "0.1.0",
-  "description": "BlockRun LLM provider plugin for OpenClaw — 30+ AI models with x402 micropayments",
+  "description": "Paid skills for OpenClaw — skill creators earn USDC, end users get premium capabilities via x402 micropayments",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
