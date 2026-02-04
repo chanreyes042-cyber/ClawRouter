@@ -42,7 +42,7 @@ export const blockrunProvider: ProviderPlugin = {
     if (!activeProxy) {
       // Fallback: point to BlockRun API directly (won't handle x402, but
       // allows config loading before proxy starts)
-      return buildProviderModels("https://api.blockrun.ai/api");
+      return buildProviderModels("https://blockrun.ai/api");
     }
     return buildProviderModels(activeProxy.baseUrl);
   },

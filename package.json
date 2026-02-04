@@ -45,8 +45,6 @@
     "url": "git+https://github.com/BlockRunAI/claw-router.git"
   },
   "dependencies": {
-    "@x402/evm": "^2.2.0",
-    "@x402/fetch": "^2.2.0",
     "viem": "^2.39.3"
   },
   "peerDependencies": {
