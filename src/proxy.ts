@@ -26,6 +26,7 @@ import { logUsage, type UsageEntry } from "./logger.js";
 
 const BLOCKRUN_API = "https://api.blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
+const USER_AGENT = "claw-router/0.1.0";
 
 export type ProxyOptions = {
   walletKey: string;
@@ -225,6 +226,8 @@ async function proxyRequest(
   if (!headers["content-type"]) {
     headers["content-type"] = "application/json";
   }
+  // Set User-Agent for BlockRun API tracking
+  headers["user-agent"] = USER_AGENT;
 
   // Make the request through x402-wrapped fetch
   // This handles: request → 402 → sign payment → retry with PAYMENT-SIGNATURE header

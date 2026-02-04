@@ -25,6 +25,7 @@
 import type { OpenClawPluginDefinition, OpenClawPluginApi } from "./types.js";
 import { blockrunProvider, setActiveProxy } from "./provider.js";
 import { startProxy } from "./proxy.js";
+import { resolveOrGenerateWalletKey } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 
 const plugin: OpenClawPluginDefinition = {
@@ -41,13 +42,17 @@ const plugin: OpenClawPluginDefinition = {
   },
 
   async activate(api: OpenClawPluginApi) {
-    // Resolve wallet key from config or env
-    const walletKey = resolveWalletKey(api);
-    if (!walletKey) {
-      api.logger.warn(
-        "BlockRun wallet key not configured. Run `openclaw provider add blockrun` or set BLOCKRUN_WALLET_KEY.",
-      );
-      return;
+    // Resolve wallet key: saved file → env var → auto-generate
+    const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
+
+    // Log wallet source
+    if (source === "generated") {
+      api.logger.info(`Generated new wallet: ${address}`);
+      api.logger.info(`Fund with USDC on Base to start using ClawRouter.`);
+    } else if (source === "saved") {
+      api.logger.info(`Using saved wallet: ${address}`);
+    } else {
+      api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
     }
 
     // Resolve routing config overrides from plugin config
@@ -85,30 +90,6 @@ const plugin: OpenClawPluginDefinition = {
   },
 };
 
-/**
- * Resolve the wallet key from plugin config, OpenClaw config, or environment.
- */
-function resolveWalletKey(api: OpenClawPluginApi): string | undefined {
-  // 1. Plugin-level config
-  const pluginKey = api.pluginConfig?.walletKey;
-  if (typeof pluginKey === "string" && pluginKey.startsWith("0x")) {
-    return pluginKey;
-  }
-
-  // 2. Environment variable
-  const envKey = process.env.BLOCKRUN_WALLET_KEY;
-  if (typeof envKey === "string" && envKey.startsWith("0x")) {
-    return envKey;
-  }
-
-  // 3. Provider auth profile credential (stored by `openclaw provider add blockrun`)
-  const providerConfig = api.config?.models?.providers?.blockrun;
-  if (providerConfig && typeof providerConfig.apiKey === "string" && providerConfig.apiKey.startsWith("0x")) {
-    return providerConfig.apiKey;
-  }
-
-  return undefined;
-}
 
 export default plugin;
 
