@@ -12,7 +12,7 @@ One wallet, 30+ models, zero API keys.
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 
-[Docs](https://docs.blockrun.ai) &middot; [Models](https://blockrun.ai/models) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
+[Docs](https://blockrun.ai/docs) &middot; [Models](https://blockrun.ai/models) &middot; [Telegram](https://t.me/blockrunAI) &middot; [X](https://x.com/BlockRunAI)
 
 </div>
 

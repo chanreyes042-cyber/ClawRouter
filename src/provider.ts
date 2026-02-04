@@ -33,7 +33,7 @@ export function getActiveProxy(): ProxyHandle | null {
 export const blockrunProvider: ProviderPlugin = {
   id: "blockrun",
   label: "BlockRun",
-  docsPath: "https://docs.blockrun.ai",
+  docsPath: "https://blockrun.ai/docs",
   aliases: ["br"],
   envVars: ["BLOCKRUN_WALLET_KEY"],
 
