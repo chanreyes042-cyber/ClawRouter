@@ -3,9 +3,16 @@
  *
  * Based on BlockRun's proven implementation.
  * Handles 402 Payment Required responses with EIP-712 signed USDC transfers.
+ *
+ * Optimizations (v0.3.0):
+ *   - Payment cache: after first 402, caches {payTo, asset, network} per endpoint.
+ *     On subsequent requests, pre-signs payment and sends with first request,
+ *     skipping the 402 round trip (~200ms savings).
+ *   - Falls back to normal 402 flow if pre-signed payment is rejected.
  */
 
 import { signTypedData, privateKeyToAccount } from "viem/accounts";
+import { PaymentCache, type CachedPaymentParams } from "./payment-cache.js";
 
 const BASE_CHAIN_ID = 8453;
 const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
@@ -115,29 +122,91 @@ async function createPaymentPayload(
   return btoa(JSON.stringify(paymentData));
 }
 
+/** Pre-auth parameters for skipping the 402 round trip. */
+export type PreAuthParams = {
+  estimatedAmount: string; // USDC amount in smallest unit (6 decimals)
+};
+
+/** Result from createPaymentFetch — includes the fetch wrapper and payment cache. */
+export type PaymentFetchResult = {
+  fetch: (input: RequestInfo | URL, init?: RequestInit, preAuth?: PreAuthParams) => Promise<Response>;
+  cache: PaymentCache;
+};
+
 /**
  * Create a fetch wrapper that handles x402 payment automatically.
+ *
+ * Supports pre-auth: if cached payment params + estimated amount are available,
+ * pre-signs and attaches payment to the first request, skipping the 402 round trip.
+ * Falls back to normal 402 flow if pre-signed payment is rejected.
  */
-export function createPaymentFetch(privateKey: `0x${string}`): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+export function createPaymentFetch(privateKey: `0x${string}`): PaymentFetchResult {
   const account = privateKeyToAccount(privateKey);
   const walletAddress = account.address;
+  const paymentCache = new PaymentCache();
 
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const payFetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    preAuth?: PreAuthParams,
+  ): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const endpointPath = new URL(url).pathname;
 
-    // First request - may get 402
+    // --- Pre-auth path: skip 402 round trip ---
+    const cached = paymentCache.get(endpointPath);
+    if (cached && preAuth?.estimatedAmount) {
+      const paymentPayload = await createPaymentPayload(
+        privateKey,
+        walletAddress,
+        cached.payTo,
+        preAuth.estimatedAmount,
+        url,
+      );
+
+      const preAuthHeaders = new Headers(init?.headers);
+      preAuthHeaders.set("payment-signature", paymentPayload);
+
+      const response = await fetch(input, { ...init, headers: preAuthHeaders });
+
+      // Pre-auth accepted — skip 402 entirely
+      if (response.status !== 402) {
+        return response;
+      }
+
+      // Pre-auth rejected (wrong amount, payTo changed, etc.)
+      // Fall through to normal 402 flow using THIS 402 response
+      const paymentHeader = response.headers.get("x-payment-required");
+      if (paymentHeader) {
+        return handle402(input, init, url, endpointPath, paymentHeader);
+      }
+      // No payment header in rejection — return as-is
+      return response;
+    }
+
+    // --- Normal path: first request may get 402 ---
     const response = await fetch(input, init);
 
     if (response.status !== 402) {
       return response;
     }
 
-    // Parse 402 payment requirements
     const paymentHeader = response.headers.get("x-payment-required");
     if (!paymentHeader) {
       throw new Error("402 response missing x-payment-required header");
     }
 
+    return handle402(input, init, url, endpointPath, paymentHeader);
+  };
+
+  /** Handle a 402 response: parse, cache params, sign, retry. */
+  async function handle402(
+    input: RequestInfo | URL,
+    init: RequestInit | undefined,
+    url: string,
+    endpointPath: string,
+    paymentHeader: string,
+  ): Promise<Response> {
     const paymentRequired = parsePaymentRequired(paymentHeader);
     const option = paymentRequired.accepts?.[0];
     if (!option) {
@@ -149,13 +218,23 @@ export function createPaymentFetch(privateKey: `0x${string}`): (input: RequestIn
       throw new Error("No amount in payment requirements");
     }
 
+    // Cache payment params for future pre-auth
+    paymentCache.set(endpointPath, {
+      payTo: option.payTo,
+      asset: option.asset,
+      scheme: option.scheme,
+      network: option.network,
+      extra: option.extra,
+      maxTimeoutSeconds: option.maxTimeoutSeconds,
+    });
+
     // Create signed payment
     const paymentPayload = await createPaymentPayload(
       privateKey,
       walletAddress,
       option.payTo,
       amount,
-      url
+      url,
     );
 
     // Retry with payment
@@ -166,5 +245,7 @@ export function createPaymentFetch(privateKey: `0x${string}`): (input: RequestIn
       ...init,
       headers: retryHeaders,
     });
-  };
+  }
+
+  return { fetch: payFetch, cache: paymentCache };
 }

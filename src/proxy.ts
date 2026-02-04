@@ -10,22 +10,30 @@
  *        → gets 402 → @x402/fetch signs payment → retries
  *        → streams response back to pi-ai
  *
- * Phase 2 additions:
- *   - Smart routing: when model is "blockrun/auto", classify query and pick cheapest model
+ * Optimizations (v0.3.0):
+ *   - SSE heartbeat: for streaming requests, sends headers + heartbeat immediately
+ *     before the x402 flow, preventing OpenClaw's 10-15s timeout from firing.
+ *   - Response dedup: hashes request bodies and caches responses for 30s,
+ *     preventing double-charging when OpenClaw retries after timeout.
+ *   - Payment cache: after first 402, pre-signs subsequent requests to skip
+ *     the 402 round trip (~200ms savings per request).
+ *   - Smart routing: when model is "blockrun/auto", classify query and pick cheapest model.
  *   - Usage logging: log every request as JSON line to ~/.openclaw/blockrun/logs/
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { privateKeyToAccount } from "viem/accounts";
-import { createPaymentFetch } from "./x402.js";
+import { createPaymentFetch, type PreAuthParams } from "./x402.js";
 import { route, getFallbackChain, DEFAULT_ROUTING_CONFIG, type RouterOptions, type RoutingDecision, type RoutingConfig, type ModelPricing } from "./router/index.js";
 import { BLOCKRUN_MODELS } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
+import { RequestDeduplicator, type CachedResponse } from "./dedup.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
-const USER_AGENT = "clawrouter/0.2.3";
+const USER_AGENT = "clawrouter/0.3.0";
+const HEARTBEAT_INTERVAL_MS = 2_000;
 
 export type ProxyOptions = {
   walletKey: string;
@@ -72,6 +80,27 @@ function mergeRoutingConfig(overrides?: Partial<RoutingConfig>): RoutingConfig {
 }
 
 /**
+ * Estimate USDC cost for a request based on model pricing.
+ * Returns amount string in USDC smallest unit (6 decimals) or undefined if unknown.
+ */
+function estimateAmount(modelId: string, bodyLength: number, maxTokens: number): string | undefined {
+  const model = BLOCKRUN_MODELS.find(m => m.id === modelId);
+  if (!model) return undefined;
+
+  // Rough estimate: ~4 chars per token for input
+  const estimatedInputTokens = Math.ceil(bodyLength / 4);
+  const estimatedOutputTokens = maxTokens || model.maxOutput || 4096;
+
+  const costUsd =
+    (estimatedInputTokens / 1_000_000) * model.inputPrice +
+    (estimatedOutputTokens / 1_000_000) * model.outputPrice;
+
+  // Convert to USDC 6-decimal integer, add 20% buffer for estimation error
+  const amountMicros = Math.ceil(costUsd * 1.2 * 1_000_000);
+  return amountMicros.toString();
+}
+
+/**
  * Start the local x402 proxy server.
  *
  * Returns a handle with the assigned port, base URL, and a close function.
@@ -81,17 +110,20 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 
   // Create x402 payment-enabled fetch from wallet private key
   const account = privateKeyToAccount(options.walletKey as `0x${string}`);
-  const payFetch = createPaymentFetch(options.walletKey as `0x${string}`);
+  const { fetch: payFetch, cache: paymentCache } = createPaymentFetch(options.walletKey as `0x${string}`);
 
-  // Build router options
+  // Build router options (pass the new payFetch signature — it accepts preAuth as 3rd arg)
   const routingConfig = mergeRoutingConfig(options.routingConfig);
   const modelPricing = buildModelPricing();
   const routerOpts: RouterOptions = {
     config: routingConfig,
     modelPricing,
-    payFetch,
+    payFetch: (input, init) => payFetch(input, init), // router doesn't need preAuth
     apiBase,
   };
+
+  // Request deduplicator (shared across all requests)
+  const deduplicator = new RequestDeduplicator();
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // Health check
@@ -109,7 +141,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     }
 
     try {
-      await proxyRequest(req, res, apiBase, payFetch, options, routerOpts);
+      await proxyRequest(req, res, apiBase, payFetch, options, routerOpts, deduplicator);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       options.onError?.(error);
@@ -119,6 +151,11 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         res.end(JSON.stringify({
           error: { message: `Proxy error: ${error.message}`, type: "proxy_error" },
         }));
+      } else if (!res.writableEnded) {
+        // Headers already sent (streaming) — send error as SSE event
+        res.write(`data: ${JSON.stringify({ error: { message: error.message, type: "proxy_error" } })}\n\n`);
+        res.write("data: [DONE]\n\n");
+        res.end();
       }
     }
   });
@@ -151,16 +188,20 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
 /**
  * Proxy a single request through x402 payment flow to BlockRun API.
  *
- * When model is "blockrun/auto", runs the smart router to pick the
- * cheapest capable model before forwarding.
+ * Optimizations applied in order:
+ *   1. Dedup check — if same request body seen within 30s, replay cached response
+ *   2. Streaming heartbeat — for stream:true, send 200 + heartbeats immediately
+ *   3. Payment pre-auth — estimate USDC amount and pre-sign to skip 402 round trip
+ *   4. Smart routing — when model is "blockrun/auto", pick cheapest capable model
  */
 async function proxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
   apiBase: string,
-  payFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+  payFetch: (input: RequestInfo | URL, init?: RequestInit, preAuth?: PreAuthParams) => Promise<Response>,
   options: ProxyOptions,
   routerOpts: RouterOptions,
+  deduplicator: RequestDeduplicator,
 ): Promise<void> {
   const startTime = Date.now();
 
@@ -176,11 +217,17 @@ async function proxyRequest(
 
   // --- Smart routing ---
   let routingDecision: RoutingDecision | undefined;
+  let isStreaming = false;
+  let modelId = "";
+  let maxTokens = 4096;
   const isChatCompletion = req.url?.includes("/chat/completions");
 
   if (isChatCompletion && body.length > 0) {
     try {
       const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
+      isStreaming = parsed.stream === true;
+      modelId = (parsed.model as string) || "";
+      maxTokens = (parsed.max_tokens as number) || 4096;
 
       if (parsed.model === AUTO_MODEL) {
         // Extract prompt from messages
@@ -195,12 +242,12 @@ async function proxyRequest(
         const systemMsg = messages?.find((m: ChatMessage) => m.role === "system");
         const prompt = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
         const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : undefined;
-        const maxTokens = (parsed.max_tokens as number) || 4096;
 
         routingDecision = await route(prompt, systemPrompt, maxTokens, routerOpts);
 
         // Replace model in body
         parsed.model = routingDecision.model;
+        modelId = routingDecision.model;
         body = Buffer.from(JSON.stringify(parsed));
 
         options.onRouted?.(routingDecision);
@@ -210,8 +257,54 @@ async function proxyRequest(
     }
   }
 
+  // --- Dedup check ---
+  const dedupKey = RequestDeduplicator.hash(body);
+
+  // Check completed cache first
+  const cached = deduplicator.getCached(dedupKey);
+  if (cached) {
+    res.writeHead(cached.status, cached.headers);
+    res.end(cached.body);
+    return;
+  }
+
+  // Check in-flight — wait for the original request to complete
+  const inflight = deduplicator.getInflight(dedupKey);
+  if (inflight) {
+    const result = await inflight;
+    res.writeHead(result.status, result.headers);
+    res.end(result.body);
+    return;
+  }
+
+  // Register this request as in-flight
+  deduplicator.markInflight(dedupKey);
+
+  // --- Streaming: early header flush + heartbeat ---
+  let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
+  let headersSentEarly = false;
+
+  if (isStreaming) {
+    // Send 200 + SSE headers immediately, before x402 flow
+    res.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      "connection": "keep-alive",
+    });
+    headersSentEarly = true;
+
+    // First heartbeat immediately
+    res.write(": heartbeat\n\n");
+
+    // Continue heartbeats every 2s while waiting for upstream
+    heartbeatInterval = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(": heartbeat\n\n");
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
   // Forward headers, stripping host, connection, and content-length
-  // (content-length may be wrong after body modification for routing)
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
     if (key === "host" || key === "connection" || key === "transfer-encoding" || key === "content-length") continue;
@@ -219,46 +312,126 @@ async function proxyRequest(
       headers[key] = value;
     }
   }
-  // Ensure content-type is set
   if (!headers["content-type"]) {
     headers["content-type"] = "application/json";
   }
-  // Set User-Agent for BlockRun API tracking
   headers["user-agent"] = USER_AGENT;
 
-  // Make the request through x402-wrapped fetch
-  // This handles: request → 402 → sign payment → retry with PAYMENT-SIGNATURE header
-  const upstream = await payFetch(upstreamUrl, {
-    method: req.method ?? "POST",
-    headers,
-    body: body.length > 0 ? body : undefined,
-  });
-
-  // Forward status and headers from upstream
-  const responseHeaders: Record<string, string> = {};
-  upstream.headers.forEach((value, key) => {
-    // Skip hop-by-hop headers
-    if (key === "transfer-encoding" || key === "connection") return;
-    responseHeaders[key] = value;
-  });
-
-  res.writeHead(upstream.status, responseHeaders);
-
-  // Stream the response body
-  if (upstream.body) {
-    const reader = upstream.body.getReader();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-    } finally {
-      reader.releaseLock();
+  // --- Payment pre-auth: estimate amount to skip 402 round trip ---
+  let preAuth: PreAuthParams | undefined;
+  if (modelId) {
+    const estimated = estimateAmount(modelId, body.length, maxTokens);
+    if (estimated) {
+      preAuth = { estimatedAmount: estimated };
     }
   }
 
-  res.end();
+  try {
+    // Make the request through x402-wrapped fetch (with optional pre-auth)
+    const upstream = await payFetch(upstreamUrl, {
+      method: req.method ?? "POST",
+      headers,
+      body: body.length > 0 ? body : undefined,
+    }, preAuth);
+
+    // Clear heartbeat — real data is about to flow
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = undefined;
+    }
+
+    // --- Stream response and collect for dedup cache ---
+    const responseChunks: Buffer[] = [];
+
+    if (headersSentEarly) {
+      // Streaming: headers already sent. Check for upstream errors.
+      if (upstream.status !== 200) {
+        const errBody = await upstream.text();
+        const errEvent = `data: ${JSON.stringify({ error: { message: errBody, type: "upstream_error", status: upstream.status } })}\n\n`;
+        res.write(errEvent);
+        res.write("data: [DONE]\n\n");
+        res.end();
+
+        // Cache the error response for dedup
+        const errBuf = Buffer.from(errEvent + "data: [DONE]\n\n");
+        deduplicator.complete(dedupKey, {
+          status: 200, // we already sent 200
+          headers: { "content-type": "text/event-stream" },
+          body: errBuf,
+          completedAt: Date.now(),
+        });
+        return;
+      }
+
+      // Pipe upstream SSE data to client
+      if (upstream.body) {
+        const reader = upstream.body.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+            responseChunks.push(Buffer.from(value));
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+
+      res.end();
+
+      // Cache for dedup
+      deduplicator.complete(dedupKey, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+        body: Buffer.concat(responseChunks),
+        completedAt: Date.now(),
+      });
+    } else {
+      // Non-streaming: forward status and headers from upstream
+      const responseHeaders: Record<string, string> = {};
+      upstream.headers.forEach((value, key) => {
+        if (key === "transfer-encoding" || key === "connection") return;
+        responseHeaders[key] = value;
+      });
+
+      res.writeHead(upstream.status, responseHeaders);
+
+      if (upstream.body) {
+        const reader = upstream.body.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(value);
+            responseChunks.push(Buffer.from(value));
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+
+      res.end();
+
+      // Cache for dedup
+      deduplicator.complete(dedupKey, {
+        status: upstream.status,
+        headers: responseHeaders,
+        body: Buffer.concat(responseChunks),
+        completedAt: Date.now(),
+      });
+    }
+  } catch (err) {
+    // Clear heartbeat on error
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+    }
+
+    // Remove in-flight entry so retries aren't blocked
+    deduplicator.removeInflight(dedupKey);
+
+    throw err;
+  }
 
   // --- Usage logging (fire-and-forget) ---
   if (routingDecision) {

@@ -69,7 +69,7 @@ const plugin: OpenClawPluginDefinition = {
   id: "clawrouter",
   name: "ClawRouter",
   description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
-  version: "0.2.3",
+  version: "0.3.0",
 
   register(api: OpenClawPluginApi) {
     // Register BlockRun as a provider (sync — available immediately)
@@ -99,3 +99,9 @@ export { route, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
 export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
 export { logUsage } from "./logger.js";
 export type { UsageEntry } from "./logger.js";
+export { RequestDeduplicator } from "./dedup.js";
+export type { CachedResponse } from "./dedup.js";
+export { PaymentCache } from "./payment-cache.js";
+export type { CachedPaymentParams } from "./payment-cache.js";
+export { createPaymentFetch } from "./x402.js";
+export type { PreAuthParams, PaymentFetchResult } from "./x402.js";
