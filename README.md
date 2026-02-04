@@ -135,12 +135,6 @@ Request → 402 (price: $0.003) → wallet signs USDC → retry → response
 
 USDC stays in your wallet until the moment each request is paid — non-custodial. The price is visible in the 402 response before your wallet signs.
 
-**Pricing formula:**
-
-```
-Price = (input_tokens × input_rate) + (max_output_tokens × output_rate)
-```
-
 **Funding your wallet** — send USDC on Base to your wallet address:
 - Coinbase — buy USDC, send to Base
 - Any CEX — withdraw USDC to Base
