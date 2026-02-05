@@ -246,6 +246,18 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
   },
 
+  // Moonshot / Kimi
+  {
+    id: "moonshot/kimi-k2.5",
+    name: "Kimi K2.5",
+    inputPrice: 0.6,
+    outputPrice: 2.5,
+    contextWindow: 262144,
+    maxOutput: 8192,
+    reasoning: true,
+    vision: true,
+  },
+
   // xAI / Grok
   {
     id: "xai/grok-3",
