@@ -130,7 +130,7 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 | o3                | $2.00     | $8.00      | 200K    |    \*     |
 | o3-mini           | $1.10     | $4.40      | 128K    |    \*     |
 | **Anthropic**     |           |            |         |           |
-| claude-opus-4.5   | $15.00    | $75.00     | 200K    |    \*     |
+| claude-opus-4.5   | $5.00     | $25.00     | 200K    |    \*     |
 | claude-sonnet-4   | $3.00     | $15.00     | 200K    |    \*     |
 | claude-haiku-4.5  | $1.00     | $5.00      | 200K    |           |
 | **Google**        |           |            |         |           |

@@ -190,8 +190,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   {
     id: "anthropic/claude-opus-4.5",
     name: "Claude Opus 4.5",
-    inputPrice: 15.0,
-    outputPrice: 75.0,
+    inputPrice: 5.0,
+    outputPrice: 25.0,
     contextWindow: 200000,
     maxOutput: 32000,
     reasoning: true,
@@ -250,8 +250,8 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   {
     id: "moonshot/kimi-k2.5",
     name: "Kimi K2.5",
-    inputPrice: 0.6,
-    outputPrice: 2.5,
+    inputPrice: 0.5,
+    outputPrice: 2.4,
     contextWindow: 262144,
     maxOutput: 8192,
     reasoning: true,

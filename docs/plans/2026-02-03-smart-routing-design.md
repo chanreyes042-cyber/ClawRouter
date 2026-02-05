@@ -173,7 +173,7 @@ Implemented in [`src/router/selector.ts`](../../src/router/selector.ts) and [`sr
 | ------------- | --------------------------- | ------------------- | -------------------------------- |
 | **SIMPLE**    | `google/gemini-2.5-flash`   | $0.60               | deepseek-chat → gpt-4o-mini      |
 | **MEDIUM**    | `deepseek/deepseek-chat`    | $0.42               | gemini-flash → gpt-4o-mini       |
-| **COMPLEX**   | `anthropic/claude-opus-4.5` | $75.00              | gpt-4o → gemini-2.5-pro          |
+| **COMPLEX**   | `anthropic/claude-opus-4.5` | $25.00              | gpt-4o → gemini-2.5-pro          |
 | **REASONING** | `openai/o3`                 | $8.00               | gemini-2.5-pro → claude-sonnet-4 |
 
 ### Cost Savings (vs Claude Opus at $75/M)
@@ -182,7 +182,7 @@ Implemented in [`src/router/selector.ts`](../../src/router/selector.ts) and [`sr
 | ---------------- | ------------ | ------------ | --------------- |
 | SIMPLE           | 40%          | $0.60        | **99% cheaper** |
 | MEDIUM           | 30%          | $0.42        | **99% cheaper** |
-| COMPLEX          | 20%          | $75.00       | best quality    |
+| COMPLEX          | 20%          | $25.00       | best quality    |
 | REASONING        | 10%          | $8.00        | **89% cheaper** |
 | **Weighted avg** |              | **$16.17/M** | **78% savings** |
 
