@@ -34,6 +34,10 @@ One wallet, 30+ models, zero API keys.
 - **x402 micropayments** — pay per request with USDC on Base, no API keys
 - **Open source** — MIT licensed, fully inspectable routing logic
 
+### Ask Your OpenClaw How ClawRouter Saves You Money
+
+<img src="docs/clawrouter-savings.png" alt="ClawRouter savings explanation" width="600">
+
 ---
 
 ## Quick Start (2 mins)
