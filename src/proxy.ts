@@ -546,21 +546,31 @@ async function proxyRequest(
         return;
       }
 
-      // Pipe upstream SSE data to client
+      // Convert non-streaming JSON response to SSE format for client
+      // (BlockRun API returns JSON since we forced stream:false)
       if (upstream.body) {
         const reader = upstream.body.getReader();
+        const chunks: Uint8Array[] = [];
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            res.write(value);
-            responseChunks.push(Buffer.from(value));
+            chunks.push(value);
           }
         } finally {
           reader.releaseLock();
         }
+
+        // Combine chunks and wrap in SSE format
+        const jsonBody = Buffer.concat(chunks);
+        const sseData = `data: ${jsonBody.toString()}\n\n`;
+        res.write(sseData);
+        responseChunks.push(Buffer.from(sseData));
       }
 
+      // Send SSE terminator
+      res.write("data: [DONE]\n\n");
+      responseChunks.push(Buffer.from("data: [DONE]\n\n"));
       res.end();
 
       // Cache for dedup
