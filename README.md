@@ -469,21 +469,12 @@ lsof -i :8402
 
 ### How to Update ClawRouter
 
-**Recommended:** Run the reinstall script (handles everything automatically):
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/BlockRunAI/ClawRouter/main/scripts/reinstall.sh | bash
+openclaw gateway restart
 ```
 
-**Manual update:** If you prefer manual steps or the script fails:
-
-```bash
-# Remove old plugin and reinstall
-rm -rf ~/.openclaw/extensions/clawrouter
-openclaw plugins install @blockrun/clawrouter
-```
-
-**Note:** OpenClaw doesn't auto-update plugins. You must reinstall to get new versions.
+This removes the old version, installs the latest, and restarts the gateway.
 
 ### Verify Routing is Working
 
