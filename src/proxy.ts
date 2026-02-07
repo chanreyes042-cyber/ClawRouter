@@ -316,7 +316,14 @@ async function proxyRequest(
         bodyModified = true;
       }
 
-      if (parsed.model === AUTO_MODEL || parsed.model === AUTO_MODEL_SHORT) {
+      // Normalize model name for comparison (trim whitespace, lowercase)
+      const normalizedModel = typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
+      const isAutoModel = normalizedModel === AUTO_MODEL.toLowerCase() || normalizedModel === AUTO_MODEL_SHORT.toLowerCase();
+
+      // Debug: log received model name
+      console.log(`[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}", isAuto: ${isAutoModel}`);
+
+      if (isAutoModel) {
         // Extract prompt from messages
         type ChatMessage = { role: string; content: string };
         const messages = parsed.messages as ChatMessage[] | undefined;
@@ -347,8 +354,11 @@ async function proxyRequest(
       if (bodyModified) {
         body = Buffer.from(JSON.stringify(parsed));
       }
-    } catch {
-      // JSON parse error — forward body as-is
+    } catch (err) {
+      // Log routing errors so they're not silently swallowed
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[ClawRouter] Routing error: ${errorMsg}`);
+      options.onError?.(new Error(`Routing failed: ${errorMsg}`));
     }
   }
 
