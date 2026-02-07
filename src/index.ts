@@ -121,32 +121,38 @@ function injectAuthProfile(logger: { info: (msg: string) => void }): void {
         }
       }
 
-      // Load or create auth-profiles.json
-      let authProfiles: Record<string, unknown> = {};
+      // Load or create auth-profiles.json with correct OpenClaw format
+      // Format: { version: 1, profiles: { "provider:profileId": { type, provider, key } } }
+      let store: { version: number; profiles: Record<string, unknown> } = { version: 1, profiles: {} };
       if (existsSync(authPath)) {
         try {
-          authProfiles = JSON.parse(readFileSync(authPath, "utf-8"));
+          const existing = JSON.parse(readFileSync(authPath, "utf-8"));
+          // Check if valid OpenClaw format (has version and profiles)
+          if (existing.version && existing.profiles) {
+            store = existing;
+          }
+          // Old format without version/profiles is discarded and recreated
         } catch {
-          authProfiles = {};
+          // Invalid JSON, use fresh store
         }
       }
 
-      // Check if blockrun auth already exists
-      if (authProfiles.blockrun) {
+      // Check if blockrun auth already exists (OpenClaw format: profiles["provider:profileId"])
+      const profileKey = "blockrun:default";
+      if (store.profiles[profileKey]) {
         continue; // Already configured
       }
 
-      // Inject placeholder auth for blockrun
+      // Inject placeholder auth for blockrun (OpenClaw format)
       // The proxy handles real x402 auth internally, this just satisfies OpenClaw's lookup
-      authProfiles.blockrun = {
-        profileId: "default",
-        credential: {
-          apiKey: "x402-proxy-handles-auth",
-        },
+      store.profiles[profileKey] = {
+        type: "api_key",
+        provider: "blockrun",
+        key: "x402-proxy-handles-auth",
       };
 
       try {
-        writeFileSync(authPath, JSON.stringify(authProfiles, null, 2));
+        writeFileSync(authPath, JSON.stringify(store, null, 2));
         logger.info(`Injected BlockRun auth profile for agent: ${agentId}`);
       } catch (err) {
         logger.info(
@@ -232,7 +238,7 @@ const plugin: OpenClawPluginDefinition = {
   id: "clawrouter",
   name: "ClawRouter",
   description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
-  version: "0.3.16",
+  version: "0.3.17",
 
   register(api: OpenClawPluginApi) {
     // Skip heavy initialization in completion mode — only completion script is needed

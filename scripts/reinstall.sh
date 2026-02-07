@@ -41,19 +41,30 @@ const authPath = path.join(authDir, 'auth-profiles.json');
 // Create directory if needed
 fs.mkdirSync(authDir, { recursive: true });
 
-// Load or create auth-profiles.json
-let authProfiles = {};
+// Load or create auth-profiles.json with correct OpenClaw format
+let store = { version: 1, profiles: {} };
 if (fs.existsSync(authPath)) {
-  try { authProfiles = JSON.parse(fs.readFileSync(authPath, 'utf8')); } catch {}
+  try {
+    const existing = JSON.parse(fs.readFileSync(authPath, 'utf8'));
+    // Migrate if old format (no version field)
+    if (existing.version && existing.profiles) {
+      store = existing;
+    } else {
+      // Old format - keep version/profiles structure, old data is discarded
+      store = { version: 1, profiles: {} };
+    }
+  } catch {}
 }
 
-// Inject blockrun auth if missing
-if (!authProfiles.blockrun) {
-  authProfiles.blockrun = {
-    profileId: 'default',
-    credential: { apiKey: 'x402-proxy-handles-auth' }
+// Inject blockrun auth if missing (OpenClaw format: profiles['provider:profileId'])
+const profileKey = 'blockrun:default';
+if (!store.profiles[profileKey]) {
+  store.profiles[profileKey] = {
+    type: 'api_key',
+    provider: 'blockrun',
+    key: 'x402-proxy-handles-auth'
   };
-  fs.writeFileSync(authPath, JSON.stringify(authProfiles, null, 2));
+  fs.writeFileSync(authPath, JSON.stringify(store, null, 2));
   console.log('  Auth profile created');
 } else {
   console.log('  Auth profile already exists');
