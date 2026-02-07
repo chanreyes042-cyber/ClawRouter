@@ -546,8 +546,9 @@ async function proxyRequest(
         return;
       }
 
-      // Convert non-streaming JSON response to SSE format for client
+      // Convert non-streaming JSON response to SSE streaming format for client
       // (BlockRun API returns JSON since we forced stream:false)
+      // OpenClaw expects: object="chat.completion.chunk" with choices[].delta (not message)
       if (upstream.body) {
         const reader = upstream.body.getReader();
         const chunks: Uint8Array[] = [];
@@ -561,9 +562,32 @@ async function proxyRequest(
           reader.releaseLock();
         }
 
-        // Combine chunks and wrap in SSE format
+        // Combine chunks and transform to streaming format
         const jsonBody = Buffer.concat(chunks);
-        const sseData = `data: ${jsonBody.toString()}\n\n`;
+        let ssePayload = jsonBody.toString();
+        try {
+          const rsp = JSON.parse(ssePayload) as {
+            object?: string;
+            choices?: Array<{ message?: unknown; delta?: unknown }>;
+          };
+          // Convert message → delta for each choice
+          if (rsp.choices && Array.isArray(rsp.choices)) {
+            for (const c of rsp.choices) {
+              if (c.message && !c.delta) {
+                c.delta = c.message;
+                delete c.message;
+              }
+            }
+          }
+          // Convert object type to streaming chunk format
+          if (rsp.object === "chat.completion") {
+            rsp.object = "chat.completion.chunk";
+          }
+          ssePayload = JSON.stringify(rsp);
+        } catch {
+          // If parsing fails, send as-is
+        }
+        const sseData = `data: ${ssePayload}\n\n`;
         res.write(sseData);
         responseChunks.push(Buffer.from(sseData));
       }
