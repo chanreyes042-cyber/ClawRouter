@@ -29,6 +29,19 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /**
+ * Detect if we're running in shell completion mode.
+ * When `openclaw completion --shell zsh` runs, it loads plugins but only needs
+ * the completion script output - any stdout logging pollutes the script and
+ * causes zsh to interpret colored text like `[plugins]` as glob patterns.
+ */
+function isCompletionMode(): boolean {
+  const args = process.argv;
+  // Check for: openclaw completion --shell <shell>
+  // argv[0] = node/bun, argv[1] = openclaw, argv[2] = completion
+  return args.some((arg, i) => arg === "completion" && i >= 1 && i <= 3);
+}
+
+/**
  * Inject BlockRun models config into OpenClaw config file.
  * This is required because registerProvider() alone doesn't make models available.
  */
@@ -219,9 +232,16 @@ const plugin: OpenClawPluginDefinition = {
   id: "clawrouter",
   name: "ClawRouter",
   description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
-  version: "0.3.13",
+  version: "0.3.14",
 
   register(api: OpenClawPluginApi) {
+    // Skip heavy initialization in completion mode — only completion script is needed
+    // Logging to stdout during completion pollutes the script and causes zsh errors
+    if (isCompletionMode()) {
+      api.registerProvider(blockrunProvider);
+      return;
+    }
+
     // Register BlockRun as a provider (sync — available immediately)
     api.registerProvider(blockrunProvider);
 

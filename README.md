@@ -491,10 +491,14 @@ rm -rf ~/.openclaw/extensions/clawrouter
 # Or use this one-liner:
 node -e "const f='$HOME/.openclaw/openclaw.json';const c=require(f);delete c.plugins?.entries?.clawrouter;delete c.plugins?.installs?.clawrouter;require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
 
-# 3. Reinstall
+# 3. Kill old proxy (if running)
+lsof -ti :8402 | xargs kill -9 2>/dev/null || true
+
+# 4. Reinstall
 openclaw plugins install @blockrun/clawrouter
 
-# 4. Restart OpenClaw
+# 5. Restart OpenClaw
+openclaw gateway restart
 ```
 
 ### Verify Routing is Working
