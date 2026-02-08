@@ -70,13 +70,23 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       config.models.providers.blockrun = {
         baseUrl: expectedBaseUrl,
         api: "openai-completions",
+        // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
+        // We use a placeholder since the proxy handles real x402 auth internally.
+        apiKey: "x402-proxy-handles-auth",
         models: OPENCLAW_MODELS,
       };
       needsWrite = true;
-    } else if (config.models.providers.blockrun.baseUrl !== expectedBaseUrl) {
-      // Update baseUrl if port changed via env var
-      config.models.providers.blockrun.baseUrl = expectedBaseUrl;
-      needsWrite = true;
+    } else {
+      // Update existing config if fields are missing or outdated
+      if (config.models.providers.blockrun.baseUrl !== expectedBaseUrl) {
+        config.models.providers.blockrun.baseUrl = expectedBaseUrl;
+        needsWrite = true;
+      }
+      // Ensure apiKey is present (required by ModelRegistry for /model picker)
+      if (!config.models.providers.blockrun.apiKey) {
+        config.models.providers.blockrun.apiKey = "x402-proxy-handles-auth";
+        needsWrite = true;
+      }
     }
 
     // Set blockrun/auto as default model (path: agents.defaults.model.primary)
@@ -308,6 +318,8 @@ const plugin: OpenClawPluginDefinition = {
     api.config.models.providers.blockrun = {
       baseUrl: `http://127.0.0.1:${runtimePort}/v1`,
       api: "openai-completions",
+      // apiKey is required by pi-coding-agent's ModelRegistry for providers with models.
+      apiKey: "x402-proxy-handles-auth",
       models: OPENCLAW_MODELS,
     };
 

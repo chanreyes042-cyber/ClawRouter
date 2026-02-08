@@ -48,6 +48,10 @@ console.log('  Config cleaned');
 echo "→ Stopping old proxy..."
 lsof -ti :8402 | xargs kill -9 2>/dev/null || true
 
+# 3.1. Remove stale models.json so it gets regenerated with apiKey
+echo "→ Cleaning models cache..."
+rm -f ~/.openclaw/agents/main/agent/models.json 2>/dev/null || true
+
 # 4. Reinstall
 echo "→ Installing ClawRouter..."
 openclaw plugins install @blockrun/clawrouter
@@ -96,7 +100,7 @@ if (!store.profiles[profileKey]) {
 }
 "
 
-# 6. Enable smart routing by default
+# 6. Enable smart routing and ensure apiKey is present for /model picker
 echo "→ Enabling smart routing..."
 node -e "
 const os = require('os');
@@ -115,6 +119,12 @@ if (fs.existsSync(configPath)) {
 
     // Set smart routing as default
     config.agents.defaults.model.primary = 'blockrun/auto';
+
+    // Ensure blockrun provider has apiKey (required by ModelRegistry for /model picker)
+    if (config.models?.providers?.blockrun && !config.models.providers.blockrun.apiKey) {
+      config.models.providers.blockrun.apiKey = 'x402-proxy-handles-auth';
+      console.log('  Added apiKey to blockrun provider config');
+    }
 
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     console.log('  Smart routing enabled: blockrun/auto');
