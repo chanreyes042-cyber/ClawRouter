@@ -32,6 +32,10 @@ export function route(
 ): RoutingDecision {
   const { config, modelPricing } = options;
 
+  // Use agentic tier configs when agenticMode is enabled
+  const isAgentic = config.overrides.agenticMode ?? false;
+  const tierConfigs = isAgentic && config.agenticTiers ? config.agenticTiers : config.tiers;
+
   // Estimate input tokens (~4 chars per token)
   const fullText = `${systemPrompt ?? ""} ${prompt}`;
   const estimatedTokens = Math.ceil(fullText.length / 4);
@@ -42,8 +46,8 @@ export function route(
       "COMPLEX",
       0.95,
       "rules",
-      `Input exceeds ${config.overrides.maxTokensForceComplex} tokens`,
-      config.tiers,
+      `Input exceeds ${config.overrides.maxTokensForceComplex} tokens${isAgentic ? " | agentic" : ""}`,
+      tierConfigs,
       modelPricing,
       estimatedTokens,
       maxOutputTokens,
@@ -81,12 +85,17 @@ export function route(
     }
   }
 
+  // Add agentic mode indicator to reasoning
+  if (isAgentic) {
+    reasoning += " | agentic";
+  }
+
   return selectModel(
     tier,
     confidence,
     method,
     reasoning,
-    config.tiers,
+    tierConfigs,
     modelPricing,
     estimatedTokens,
     maxOutputTokens,

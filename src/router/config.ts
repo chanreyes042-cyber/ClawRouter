@@ -594,9 +594,30 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     },
   },
 
+  // Agentic tier configs - models that excel at multi-step autonomous tasks
+  agenticTiers: {
+    SIMPLE: {
+      primary: "anthropic/claude-haiku-4.5",
+      fallback: ["moonshot/kimi-k2.5", "openai/gpt-4o-mini"],
+    },
+    MEDIUM: {
+      primary: "moonshot/kimi-k2.5",
+      fallback: ["anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4"],
+    },
+    COMPLEX: {
+      primary: "anthropic/claude-sonnet-4",
+      fallback: ["anthropic/claude-opus-4", "openai/gpt-4o"],
+    },
+    REASONING: {
+      primary: "moonshot/kimi-k2.5",
+      fallback: ["anthropic/claude-sonnet-4", "anthropic/claude-opus-4"],
+    },
+  },
+
   overrides: {
     maxTokensForceComplex: 100_000,
     structuredOutputMinTier: "MEDIUM",
     ambiguousDefaultTier: "MEDIUM",
+    agenticMode: false,
   },
 };

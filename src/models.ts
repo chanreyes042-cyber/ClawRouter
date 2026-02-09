@@ -71,6 +71,8 @@ type BlockRunModel = {
   maxOutput: number;
   reasoning?: boolean;
   vision?: boolean;
+  /** Models optimized for agentic workflows (multi-step autonomous tasks) */
+  agentic?: boolean;
 };
 
 export const BLOCKRUN_MODELS: BlockRunModel[] = [
@@ -95,6 +97,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 128000,
     reasoning: true,
     vision: true,
+    agentic: true,
   },
   {
     id: "openai/gpt-5-mini",
@@ -156,6 +159,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 128000,
     maxOutput: 16384,
     vision: true,
+    agentic: true,
   },
   {
     id: "openai/gpt-4o-mini",
@@ -205,7 +209,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   // o4-mini: Placeholder removed - model not yet released by OpenAI
 
-  // Anthropic
+  // Anthropic - all Claude models excel at agentic workflows
   {
     id: "anthropic/claude-haiku-4.5",
     name: "Claude Haiku 4.5",
@@ -213,6 +217,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 5.0,
     contextWindow: 200000,
     maxOutput: 8192,
+    agentic: true,
   },
   {
     id: "anthropic/claude-sonnet-4",
@@ -222,6 +227,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 64000,
     reasoning: true,
+    agentic: true,
   },
   {
     id: "anthropic/claude-opus-4",
@@ -231,6 +237,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 32000,
     reasoning: true,
+    agentic: true,
   },
   {
     id: "anthropic/claude-opus-4.5",
@@ -240,6 +247,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 32000,
     reasoning: true,
+    agentic: true,
   },
 
   // Google
@@ -291,7 +299,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
   },
 
-  // Moonshot / Kimi
+  // Moonshot / Kimi - optimized for agentic workflows
   {
     id: "moonshot/kimi-k2.5",
     name: "Kimi K2.5",
@@ -301,6 +309,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 8192,
     reasoning: true,
     vision: true,
+    agentic: true,
   },
 
   // xAI / Grok
@@ -369,4 +378,23 @@ export function buildProviderModels(baseUrl: string): ModelProviderConfig {
     api: "openai-completions",
     models: OPENCLAW_MODELS,
   };
+}
+
+/**
+ * Check if a model is optimized for agentic workflows.
+ * Agentic models continue autonomously with multi-step tasks
+ * instead of stopping and waiting for user input.
+ */
+export function isAgenticModel(modelId: string): boolean {
+  const model = BLOCKRUN_MODELS.find(
+    (m) => m.id === modelId || m.id === modelId.replace("blockrun/", ""),
+  );
+  return model?.agentic ?? false;
+}
+
+/**
+ * Get all agentic-capable models.
+ */
+export function getAgenticModels(): string[] {
+  return BLOCKRUN_MODELS.filter((m) => m.agentic).map((m) => m.id);
 }

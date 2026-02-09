@@ -532,6 +532,8 @@ export {
   buildProviderModels,
   MODEL_ALIASES,
   resolveModelAlias,
+  isAgenticModel,
+  getAgenticModels,
 } from "./models.js";
 export { route, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
 export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
