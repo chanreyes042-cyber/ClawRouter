@@ -532,8 +532,9 @@ export {
   resolveModelAlias,
   isAgenticModel,
   getAgenticModels,
+  getModelContextWindow,
 } from "./models.js";
-export { route, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
+export { route, DEFAULT_ROUTING_CONFIG, getFallbackChain, getFallbackChainFiltered } from "./router/index.js";
 export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
 export { logUsage } from "./logger.js";
 export type { UsageEntry } from "./logger.js";
