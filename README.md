@@ -56,7 +56,7 @@ Done! Smart routing (`blockrun/auto`) is now your default model.
 ### Tips
 
 - **Use `/model blockrun/auto`** in any conversation to switch on the fly
-- **Free tier?** Use `/model free` — routes to nvidia/gpt-oss-120b at $0
+- **Free tier?** Use `/model free` — routes to gpt-oss-120b at $0
 - **Model aliases:** `/model sonnet`, `/model grok`, `/model deepseek`, `/model kimi`
 - **Want a specific model?** Use `blockrun/openai/gpt-4o` or `blockrun/anthropic/claude-sonnet-4`
 - **Already have a funded wallet?** `export BLOCKRUN_WALLET_KEY=0x...`
@@ -213,7 +213,7 @@ This prevents wasted API calls and faster fallback to capable models.
 Use short aliases instead of full model paths:
 
 ```bash
-/model free      # nvidia/gpt-oss-120b (FREE!)
+/model free      # gpt-oss-120b (FREE!)
 /model sonnet    # anthropic/claude-sonnet-4
 /model opus      # anthropic/claude-opus-4
 /model haiku     # anthropic/claude-haiku-4.5
@@ -232,12 +232,12 @@ All aliases work with `/model blockrun/xxx` or just `/model xxx`.
 
 ### Free Tier Fallback (v0.5)
 
-When your wallet balance hits $0, ClawRouter automatically falls back to the free model (`nvidia/gpt-oss-120b`):
+When your wallet balance hits $0, ClawRouter automatically falls back to the free model (`gpt-oss-120b`):
 
 ```
 Wallet: $0.00
 Request: "Help me write a function"
-→ Routes to nvidia/gpt-oss-120b (FREE)
+→ Routes to gpt-oss-120b (FREE)
 → No "insufficient funds" error
 → Keep building while you top up
 ```
@@ -280,6 +280,7 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 | gpt-5.2               | $1.75     | $14.00     | 400K    |    \*     |
 | gpt-4o                | $2.50     | $10.00     | 128K    |           |
 | gpt-4o-mini           | $0.15     | $0.60      | 128K    |           |
+| gpt-oss-120b          | **$0**    | **$0**     | 128K    |           |
 | o3                    | $2.00     | $8.00      | 200K    |    \*     |
 | o3-mini               | $1.10     | $4.40      | 128K    |    \*     |
 | **Anthropic**         |           |            |         |           |
@@ -300,10 +301,8 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 | grok-code-fast-1      | $0.20     | $1.50      | 131K    |           |
 | **Moonshot**          |           |            |         |           |
 | kimi-k2.5             | $0.50     | $2.40      | 262K    |    \*     |
-| **NVIDIA (Free)**     |           |            |         |           |
-| gpt-oss-120b          | **$0**    | **$0**     | 128K    |           |
 
-> **Free tier:** `nvidia/gpt-oss-120b` costs nothing and serves as automatic fallback when wallet is empty.
+> **Free tier:** `gpt-oss-120b` costs nothing and serves as automatic fallback when wallet is empty.
 
 Full list: [`src/models.ts`](src/models.ts)
 
@@ -768,7 +767,7 @@ BLOCKRUN_WALLET_KEY=0x... npx tsx test-e2e.ts
 - [x] Session persistence — pin model for multi-turn conversations
 - [x] Cost tracking — /stats command with savings dashboard
 - [x] Model aliases — `/model free`, `/model sonnet`, `/model grok`, etc.
-- [x] Free tier — nvidia/gpt-oss-120b for $0 when wallet is empty
+- [x] Free tier — gpt-oss-120b for $0 when wallet is empty
 - [ ] Cascade routing — try cheap model first, escalate on low quality
 - [ ] Spend controls — daily/monthly budgets
 - [ ] Remote analytics — cost tracking at blockrun.ai
