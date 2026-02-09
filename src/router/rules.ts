@@ -71,6 +71,65 @@ function scoreQuestionComplexity(prompt: string): DimensionScore {
   return { name: "questionComplexity", score: 0, signal: null };
 }
 
+/**
+ * Score agentic task indicators.
+ * Returns agenticScore (0-1) based on keyword matches:
+ * - 3+ matches = 1.0 (high agentic)
+ * - 2 matches = 0.6 (moderate agentic)
+ * - 1 match = 0.3 (low agentic)
+ */
+function scoreAgenticTask(
+  text: string,
+  keywords: string[],
+): { dimensionScore: DimensionScore; agenticScore: number } {
+  let matchCount = 0;
+  const signals: string[] = [];
+
+  for (const keyword of keywords) {
+    if (text.includes(keyword.toLowerCase())) {
+      matchCount++;
+      if (signals.length < 3) {
+        signals.push(keyword);
+      }
+    }
+  }
+
+  // Threshold-based scoring
+  if (matchCount >= 3) {
+    return {
+      dimensionScore: {
+        name: "agenticTask",
+        score: 1.0,
+        signal: `agentic (${signals.join(", ")})`,
+      },
+      agenticScore: 1.0,
+    };
+  } else if (matchCount >= 2) {
+    return {
+      dimensionScore: {
+        name: "agenticTask",
+        score: 0.6,
+        signal: `agentic (${signals.join(", ")})`,
+      },
+      agenticScore: 0.6,
+    };
+  } else if (matchCount >= 1) {
+    return {
+      dimensionScore: {
+        name: "agenticTask",
+        score: 0.3,
+        signal: `agentic (${signals.join(", ")})`,
+      },
+      agenticScore: 0.3,
+    };
+  }
+
+  return {
+    dimensionScore: { name: "agenticTask", score: 0, signal: null },
+    agenticScore: 0,
+  };
+}
+
 // ─── Main Classifier ───
 
 export function classifyByRules(
@@ -182,6 +241,11 @@ export function classifyByRules(
     ),
   ];
 
+  // Score agentic task indicators
+  const agenticResult = scoreAgenticTask(text, config.agenticTaskKeywords);
+  dimensions.push(agenticResult.dimensionScore);
+  const agenticScore = agenticResult.agenticScore;
+
   // Collect signals
   const signals = dimensions.filter((d) => d.signal !== null).map((d) => d.signal!);
 
@@ -210,6 +274,7 @@ export function classifyByRules(
       tier: "REASONING",
       confidence: Math.max(confidence, 0.85),
       signals,
+      agenticScore,
     };
   }
 
@@ -240,10 +305,10 @@ export function classifyByRules(
 
   // If confidence is below threshold → ambiguous
   if (confidence < config.confidenceThreshold) {
-    return { score: weightedScore, tier: null, confidence, signals };
+    return { score: weightedScore, tier: null, confidence, signals, agenticScore };
   }
 
-  return { score: weightedScore, tier, confidence, signals };
+  return { score: weightedScore, tier, confidence, signals, agenticScore };
 }
 
 /**

@@ -32,13 +32,21 @@ export function route(
 ): RoutingDecision {
   const { config, modelPricing } = options;
 
-  // Use agentic tier configs when agenticMode is enabled
-  const isAgentic = config.overrides.agenticMode ?? false;
-  const tierConfigs = isAgentic && config.agenticTiers ? config.agenticTiers : config.tiers;
-
   // Estimate input tokens (~4 chars per token)
   const fullText = `${systemPrompt ?? ""} ${prompt}`;
   const estimatedTokens = Math.ceil(fullText.length / 4);
+
+  // --- Rule-based classification (runs first to get agenticScore) ---
+  const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
+
+  // Determine if agentic tiers should be used:
+  // 1. Explicit agenticMode config OR
+  // 2. Auto-detected agentic task (agenticScore >= 0.6)
+  const agenticScore = ruleResult.agenticScore ?? 0;
+  const isAutoAgentic = agenticScore >= 0.6;
+  const isExplicitAgentic = config.overrides.agenticMode ?? false;
+  const useAgenticTiers = (isAutoAgentic || isExplicitAgentic) && config.agenticTiers != null;
+  const tierConfigs = useAgenticTiers ? config.agenticTiers! : config.tiers;
 
   // --- Override: large context → force COMPLEX ---
   if (estimatedTokens > config.overrides.maxTokensForceComplex) {
@@ -46,7 +54,7 @@ export function route(
       "COMPLEX",
       0.95,
       "rules",
-      `Input exceeds ${config.overrides.maxTokensForceComplex} tokens${isAgentic ? " | agentic" : ""}`,
+      `Input exceeds ${config.overrides.maxTokensForceComplex} tokens${useAgenticTiers ? " | agentic" : ""}`,
       tierConfigs,
       modelPricing,
       estimatedTokens,
@@ -57,13 +65,10 @@ export function route(
   // Structured output detection
   const hasStructuredOutput = systemPrompt ? /json|structured|schema/i.test(systemPrompt) : false;
 
-  // --- Rule-based classification ---
-  const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
-
   let tier: Tier;
   let confidence: number;
   const method: "rules" | "llm" = "rules";
-  let reasoning = `score=${ruleResult.score} | ${ruleResult.signals.join(", ")}`;
+  let reasoning = `score=${ruleResult.score.toFixed(2)} | ${ruleResult.signals.join(", ")}`;
 
   if (ruleResult.tier !== null) {
     tier = ruleResult.tier;
@@ -86,7 +91,9 @@ export function route(
   }
 
   // Add agentic mode indicator to reasoning
-  if (isAgentic) {
+  if (isAutoAgentic) {
+    reasoning += " | auto-agentic";
+  } else if (isExplicitAgentic) {
     reasoning += " | agentic";
   }
 

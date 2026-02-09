@@ -28,7 +28,7 @@ One wallet, 30+ models, zero API keys.
 
 ## Why ClawRouter?
 
-- **100% local routing** — 14-dimension weighted scoring runs on your machine in <1ms
+- **100% local routing** — 15-dimension weighted scoring runs on your machine in <1ms
 - **Zero external calls** — no API calls for routing decisions, ever
 - **30+ models** — OpenAI, Anthropic, Google, DeepSeek, xAI, Moonshot through one wallet
 - **x402 micropayments** — pay per request with USDC on Base, no API keys
@@ -94,14 +94,14 @@ Request → Weighted Scorer (14 dimensions)
 
 No external classifier calls. Ambiguous queries default to the MEDIUM tier (DeepSeek/GPT-4o-mini) — fast, cheap, and good enough for most tasks.
 
-### 14-Dimension Weighted Scoring
+### 15-Dimension Weighted Scoring
 
 | Dimension            | Weight | What It Detects                          |
 | -------------------- | ------ | ---------------------------------------- |
 | Reasoning markers    | 0.18   | "prove", "theorem", "step by step"       |
 | Code presence        | 0.15   | "function", "async", "import", "```"     |
-| Simple indicators    | 0.12   | "what is", "define", "translate"         |
 | Multi-step patterns  | 0.12   | "first...then", "step 1", numbered lists |
+| **Agentic task**     | 0.10   | "run", "test", "fix", "deploy", "edit"   |
 | Technical terms      | 0.10   | "algorithm", "kubernetes", "distributed" |
 | Token count          | 0.08   | short (<50) vs long (>500) prompts       |
 | Creative markers     | 0.05   | "story", "poem", "brainstorm"            |
@@ -109,6 +109,7 @@ No external classifier calls. Ambiguous queries default to the MEDIUM tier (Deep
 | Constraint count     | 0.04   | "at most", "O(n)", "maximum"             |
 | Imperative verbs     | 0.03   | "build", "create", "implement"           |
 | Output format        | 0.03   | "json", "yaml", "schema"                 |
+| Simple indicators    | 0.02   | "what is", "define", "translate"         |
 | Domain specificity   | 0.02   | "quantum", "fpga", "genomics"            |
 | Reference complexity | 0.02   | "the docs", "the api", "above"           |
 | Negation complexity  | 0.01   | "don't", "avoid", "without"              |
@@ -139,6 +140,42 @@ Mixed-language prompts are supported — keywords from all languages are checked
 | REASONING | deepseek-reasoner | $0.42  | **99.4%**       |
 
 Special rule: 2+ reasoning markers → REASONING at 0.97 confidence.
+
+### Agentic Auto-Detection
+
+ClawRouter automatically detects multi-step agentic tasks and routes to models optimized for autonomous execution:
+
+```
+"what is 2+2"                    → gemini-flash (standard)
+"build the project then run tests" → kimi-k2.5 (auto-agentic)
+"fix the bug and make sure it works" → kimi-k2.5 (auto-agentic)
+```
+
+**How it works:**
+- Detects agentic keywords: file ops ("read", "edit"), execution ("run", "test", "deploy"), iteration ("fix", "debug", "verify")
+- Threshold: 2+ signals triggers auto-switch to agentic tiers
+- No config needed — works automatically
+
+**Agentic tier models** (optimized for multi-step autonomy):
+
+| Tier      | Agentic Model        | Why                                    |
+| --------- | -------------------- | -------------------------------------- |
+| SIMPLE    | claude-haiku-4.5     | Fast + reliable tool use              |
+| MEDIUM    | kimi-k2.5            | 200+ tool chains, 76% cheaper         |
+| COMPLEX   | claude-sonnet-4      | Best balance for complex tasks        |
+| REASONING | kimi-k2.5            | Extended reasoning + execution        |
+
+You can also force agentic mode via config:
+
+```yaml
+# openclaw.yaml
+plugins:
+  - id: "@blockrun/clawrouter"
+    config:
+      routing:
+        overrides:
+          agenticMode: true  # Always use agentic tiers
+```
 
 ### Cost Savings (Real Numbers)
 
@@ -586,11 +623,12 @@ BLOCKRUN_WALLET_KEY=0x... npx tsx test-e2e.ts
 
 ## Roadmap
 
-- [x] Smart routing — 14-dimension weighted scoring, 4-tier model selection
+- [x] Smart routing — 15-dimension weighted scoring, 4-tier model selection
 - [x] x402 payments — per-request USDC micropayments, non-custodial
 - [x] Response dedup — prevents double-charge on retries
 - [x] Payment pre-auth — skips 402 round trip
 - [x] SSE heartbeat — prevents upstream timeouts
+- [x] Agentic auto-detect — auto-switch to agentic models for multi-step tasks
 - [ ] Cascade routing — try cheap model first, escalate on low quality
 - [ ] Spend controls — daily/monthly budgets
 - [ ] Analytics dashboard — cost tracking at blockrun.ai
