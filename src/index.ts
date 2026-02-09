@@ -111,14 +111,16 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       needsWrite = true;
     }
 
-    // Add blockrun models to allowlist if one exists (agents.defaults.models)
-    // This ensures /model blockrun/auto and /model blockrun/free work
+    // Add ALL blockrun models to allowlist if one exists (agents.defaults.models)
+    // This ensures /model blockrun/xxx works for any registered model
     if (config.agents.defaults.models && typeof config.agents.defaults.models === "object") {
       const allowlist = config.agents.defaults.models as Record<string, unknown>;
-      const blockrunModelsToAllow = ["blockrun/auto", "blockrun/free", "blockrun/gpt-120b"];
-      for (const model of blockrunModelsToAllow) {
-        if (!allowlist[model]) {
-          allowlist[model] = { alias: model.split("/")[1] };
+      for (const model of OPENCLAW_MODELS) {
+        const fullId = `blockrun/${model.id}`;
+        if (!allowlist[fullId]) {
+          // Use last part of model ID as alias (e.g., "openai/gpt-4o" -> "gpt-4o")
+          const alias = model.id.includes("/") ? model.id.split("/").pop() : model.id;
+          allowlist[fullId] = { alias };
           needsWrite = true;
         }
       }
