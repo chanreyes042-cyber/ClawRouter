@@ -15,6 +15,7 @@ export type ScoringResult = {
   tier: Tier | null; // null = ambiguous, needs fallback classifier
   confidence: number; // sigmoid-calibrated [0, 1]
   signals: string[];
+  agenticScore?: number; // 0-1 agentic task score for auto-switching to agentic tiers
 };
 
 export type RoutingDecision = {
@@ -47,6 +48,8 @@ export type ScoringConfig = {
   referenceKeywords: string[];
   negationKeywords: string[];
   domainSpecificKeywords: string[];
+  // Agentic task detection keywords
+  agenticTaskKeywords: string[];
   // Weighted scoring parameters
   dimensionWeights: Record<string, number>;
   tierBoundaries: {
@@ -70,6 +73,12 @@ export type OverridesConfig = {
   maxTokensForceComplex: number;
   structuredOutputMinTier: Tier;
   ambiguousDefaultTier: Tier;
+  /**
+   * When enabled, prefer models optimized for agentic workflows.
+   * Agentic models continue autonomously with multi-step tasks
+   * instead of stopping and waiting for user input.
+   */
+  agenticMode?: boolean;
 };
 
 export type RoutingConfig = {
@@ -77,5 +86,7 @@ export type RoutingConfig = {
   classifier: ClassifierConfig;
   scoring: ScoringConfig;
   tiers: Record<Tier, TierConfig>;
+  /** Tier configs for agentic mode - models that excel at multi-step tasks */
+  agenticTiers?: Record<Tier, TierConfig>;
   overrides: OverridesConfig;
 };

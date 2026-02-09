@@ -26,7 +26,7 @@ One wallet, 30+ models, zero API keys.
 
 ## Why ClawRouter?
 
-- **100% local routing** — 14-dimension weighted scoring runs on your machine in <1ms
+- **100% local routing** — 15-dimension weighted scoring runs on your machine in <1ms
 - **Zero external calls** — no API calls for routing decisions, ever
 - **30+ models** — OpenAI, Anthropic, Google, DeepSeek, xAI, Moonshot through one wallet
 - **x402 micropayments** — pay per request with USDC on Base, no API keys
@@ -92,14 +92,14 @@ Request → Weighted Scorer (14 dimensions)
 
 No external classifier calls. Ambiguous queries default to the MEDIUM tier (DeepSeek/GPT-4o-mini) — fast, cheap, and good enough for most tasks.
 
-### 14-Dimension Weighted Scoring
+### 15-Dimension Weighted Scoring
 
 | Dimension            | Weight | What It Detects                          |
 | -------------------- | ------ | ---------------------------------------- |
 | Reasoning markers    | 0.18   | "prove", "theorem", "step by step"       |
 | Code presence        | 0.15   | "function", "async", "import", "```"     |
-| Simple indicators    | 0.12   | "what is", "define", "translate"         |
 | Multi-step patterns  | 0.12   | "first...then", "step 1", numbered lists |
+| **Agentic task**     | 0.10   | "run", "test", "fix", "deploy", "edit"   |
 | Technical terms      | 0.10   | "algorithm", "kubernetes", "distributed" |
 | Token count          | 0.08   | short (<50) vs long (>500) prompts       |
 | Creative markers     | 0.05   | "story", "poem", "brainstorm"            |
@@ -107,6 +107,7 @@ No external classifier calls. Ambiguous queries default to the MEDIUM tier (Deep
 | Constraint count     | 0.04   | "at most", "O(n)", "maximum"             |
 | Imperative verbs     | 0.03   | "build", "create", "implement"           |
 | Output format        | 0.03   | "json", "yaml", "schema"                 |
+| Simple indicators    | 0.02   | "what is", "define", "translate"         |
 | Domain specificity   | 0.02   | "quantum", "fpga", "genomics"            |
 | Reference complexity | 0.02   | "the docs", "the api", "above"           |
 | Negation complexity  | 0.01   | "don't", "avoid", "without"              |
@@ -129,14 +130,92 @@ Mixed-language prompts are supported — keywords from all languages are checked
 
 ### Tier → Model Mapping
 
-| Tier      | Primary Model     | Cost/M | Savings vs Opus |
-| --------- | ----------------- | ------ | --------------- |
-| SIMPLE    | gemini-2.5-flash  | $0.60  | **99.2%**       |
-| MEDIUM    | deepseek-chat     | $0.42  | **99.4%**       |
-| COMPLEX   | claude-opus-4     | $75.00 | baseline        |
-| REASONING | deepseek-reasoner | $0.42  | **99.4%**       |
+| Tier      | Primary Model          | Cost/M | Savings vs Opus |
+| --------- | ---------------------- | ------ | --------------- |
+| SIMPLE    | gemini-2.5-flash       | $0.60  | **99.2%**       |
+| MEDIUM    | grok-code-fast-1       | $1.50  | **98.0%**       |
+| COMPLEX   | gemini-2.5-pro         | $10.00 | **86.7%**       |
+| REASONING | grok-4-fast-reasoning  | $0.50  | **99.3%**       |
 
 Special rule: 2+ reasoning markers → REASONING at 0.97 confidence.
+
+### Agentic Auto-Detection
+
+ClawRouter automatically detects multi-step agentic tasks and routes to models optimized for autonomous execution:
+
+```
+"what is 2+2"                    → gemini-flash (standard)
+"build the project then run tests" → kimi-k2.5 (auto-agentic)
+"fix the bug and make sure it works" → kimi-k2.5 (auto-agentic)
+```
+
+**How it works:**
+- Detects agentic keywords: file ops ("read", "edit"), execution ("run", "test", "deploy"), iteration ("fix", "debug", "verify")
+- Threshold: 2+ signals triggers auto-switch to agentic tiers
+- No config needed — works automatically
+
+**Agentic tier models** (optimized for multi-step autonomy):
+
+| Tier      | Agentic Model        | Why                                    |
+| --------- | -------------------- | -------------------------------------- |
+| SIMPLE    | claude-haiku-4.5     | Fast + reliable tool use              |
+| MEDIUM    | kimi-k2.5            | 200+ tool chains, 76% cheaper         |
+| COMPLEX   | claude-sonnet-4      | Best balance for complex tasks        |
+| REASONING | kimi-k2.5            | Extended reasoning + execution        |
+
+You can also force agentic mode via config:
+
+```yaml
+# openclaw.yaml
+plugins:
+  - id: "@blockrun/clawrouter"
+    config:
+      routing:
+        overrides:
+          agenticMode: true  # Always use agentic tiers
+```
+
+### Tool Detection (v0.5)
+
+When your request includes a `tools` array (function calling), ClawRouter automatically switches to agentic tiers:
+
+```typescript
+// Request with tools → auto-agentic mode
+{
+  model: "blockrun/auto",
+  messages: [{ role: "user", content: "Check the weather" }],
+  tools: [{ type: "function", function: { name: "get_weather", ... } }]
+}
+// → Routes to claude-haiku-4.5 (excellent tool use)
+// → Instead of gemini-flash (may produce malformed tool calls)
+```
+
+**Why this matters:** Some models (like `deepseek-reasoner`) are optimized for chain-of-thought reasoning but can generate malformed tool calls. Tool detection ensures requests with functions go to models proven to handle tool use correctly.
+
+### Context-Length-Aware Routing (v0.5)
+
+ClawRouter automatically filters out models that can't handle your context size:
+
+```
+150K token request:
+  Full chain: [grok-4-fast (131K), deepseek (128K), kimi (262K), gemini (1M)]
+  Filtered:   [kimi (262K), gemini (1M)]
+  → Skips models that would fail with "context too long" errors
+```
+
+This prevents wasted API calls and faster fallback to capable models.
+
+### Session Persistence (v0.5)
+
+For multi-turn conversations, ClawRouter pins the model to prevent mid-task switching:
+
+```
+Turn 1: "Build a React component" → claude-sonnet-4
+Turn 2: "Add dark mode support"   → claude-sonnet-4 (pinned)
+Turn 3: "Now add tests"           → claude-sonnet-4 (pinned)
+```
+
+Sessions are identified by conversation ID and persist for 1 hour of inactivity.
 
 ### Cost Savings (Real Numbers)
 
@@ -177,8 +256,13 @@ Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
 | **xAI**           |           |            |         |           |
 | grok-3            | $3.00     | $15.00     | 131K    |    \*     |
 | grok-3-mini       | $0.30     | $0.50      | 131K    |           |
+| grok-4-fast-reasoning | $0.20 | $0.50      | 131K    |    \*     |
+| grok-4-fast       | $0.20     | $0.50      | 131K    |           |
+| grok-code-fast-1  | $0.20     | $1.50      | 131K    |           |
 | **Moonshot**      |           |            |         |           |
-| kimi-k2.5         | $0.50     | $2.40      | 128K    |    \*     |
+| kimi-k2.5         | $0.50     | $2.40      | 262K    |    \*     |
+| **NVIDIA**        |           |            |         |           |
+| gpt-oss-120b      | **FREE**  | **FREE**   | 128K    |           |
 
 Full list: [`src/models.ts`](src/models.ts)
 
@@ -444,6 +528,38 @@ console.log(decision);
 
 ---
 
+## Cost Tracking with /stats (v0.5)
+
+Track your savings in real-time:
+
+```bash
+# In any OpenClaw conversation
+/stats
+```
+
+Output:
+```
+╔════════════════════════════════════════════════════════════╗
+║              ClawRouter Usage Statistics                   ║
+╠════════════════════════════════════════════════════════════╣
+║  Period: last 7 days                                      ║
+║  Total Requests: 442                                      ║
+║  Total Cost: $1.73                                       ║
+║  Baseline Cost (Opus): $20.13                            ║
+║  💰 Total Saved: $18.40 (91.4%)                            ║
+╠════════════════════════════════════════════════════════════╣
+║  Routing by Tier:                                          ║
+║    SIMPLE     ███████████           55.0% (243)            ║
+║    MEDIUM     ██████                30.8% (136)            ║
+║    COMPLEX    █                      7.2% (32)             ║
+║    REASONING  █                      7.0% (31)             ║
+╚════════════════════════════════════════════════════════════╝
+```
+
+Stats are stored locally at `~/.openclaw/blockrun/logs/` and aggregated on demand.
+
+---
+
 ## Why Not OpenRouter / LiteLLM?
 
 They're built for developers. ClawRouter is built for **agents**.
@@ -466,7 +582,7 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 ### Quick Checklist
 
 ```bash
-# 1. Check your version (should be 0.3.21+)
+# 1. Check your version (should be 0.5.0+)
 cat ~/.openclaw/extensions/clawrouter/package.json | grep version
 
 # 2. Check proxy is running
@@ -475,6 +591,9 @@ curl http://localhost:8402/health
 # 3. Watch routing in action
 openclaw logs --follow
 # Should see: gemini-2.5-flash $0.0012 (saved 99%)
+
+# 4. View cost savings
+/stats
 ```
 
 ### "Unknown model: blockrun/auto" or "Unknown model: auto"
@@ -584,14 +703,19 @@ BLOCKRUN_WALLET_KEY=0x... npx tsx test-e2e.ts
 
 ## Roadmap
 
-- [x] Smart routing — 14-dimension weighted scoring, 4-tier model selection
+- [x] Smart routing — 15-dimension weighted scoring, 4-tier model selection
 - [x] x402 payments — per-request USDC micropayments, non-custodial
 - [x] Response dedup — prevents double-charge on retries
 - [x] Payment pre-auth — skips 402 round trip
 - [x] SSE heartbeat — prevents upstream timeouts
+- [x] Agentic auto-detect — auto-switch to agentic models for multi-step tasks
+- [x] Tool detection — auto-switch to agentic mode when tools array present
+- [x] Context-aware routing — filter out models that can't handle context size
+- [x] Session persistence — pin model for multi-turn conversations
+- [x] Cost tracking — /stats command with savings dashboard
 - [ ] Cascade routing — try cheap model first, escalate on low quality
 - [ ] Spend controls — daily/monthly budgets
-- [ ] Analytics dashboard — cost tracking at blockrun.ai
+- [ ] Remote analytics — cost tracking at blockrun.ai
 
 ---
 

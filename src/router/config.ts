@@ -544,6 +544,79 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       "gitterbasiert",
     ],
 
+    // Agentic task keywords - file ops, execution, multi-step, iterative work
+    agenticTaskKeywords: [
+      // English - File operations
+      "read file",
+      "read the file",
+      "look at",
+      "check the",
+      "open the",
+      "edit",
+      "modify",
+      "update the",
+      "change the",
+      "write to",
+      "create file",
+      // English - Execution
+      "run",
+      "execute",
+      "test",
+      "build",
+      "deploy",
+      "install",
+      "npm",
+      "pip",
+      "compile",
+      "start",
+      "launch",
+      // English - Multi-step patterns
+      "then",
+      "after that",
+      "next",
+      "and also",
+      "finally",
+      "once done",
+      "step 1",
+      "step 2",
+      "first",
+      "second",
+      "lastly",
+      // English - Iterative work
+      "fix",
+      "debug",
+      "until it works",
+      "keep trying",
+      "iterate",
+      "make sure",
+      "verify",
+      "confirm",
+      // Chinese
+      "读取文件",
+      "查看",
+      "打开",
+      "编辑",
+      "修改",
+      "更新",
+      "创建",
+      "运行",
+      "执行",
+      "测试",
+      "构建",
+      "部署",
+      "安装",
+      "然后",
+      "接下来",
+      "最后",
+      "第一步",
+      "第二步",
+      "修复",
+      "调试",
+      "直到",
+      "确认",
+      "验证",
+    ],
+
     // Dimension weights (sum to 1.0)
     dimensionWeights: {
       tokenCount: 0.08,
@@ -551,7 +624,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       reasoningMarkers: 0.18,
       technicalTerms: 0.1,
       creativeMarkers: 0.05,
-      simpleIndicators: 0.12,
+      simpleIndicators: 0.02, // Reduced from 0.12 to make room for agenticTask
       multiStepPatterns: 0.12,
       questionComplexity: 0.05,
       imperativeVerbs: 0.03,
@@ -560,6 +633,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
       referenceComplexity: 0.02,
       negationComplexity: 0.01,
       domainSpecificity: 0.02,
+      agenticTask: 0.10, // Significant weight for agentic detection
     },
 
     // Tier boundaries on weighted score axis
@@ -578,19 +652,39 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
   tiers: {
     SIMPLE: {
       primary: "google/gemini-2.5-flash",
-      fallback: ["deepseek/deepseek-chat", "openai/gpt-4o-mini"],
+      fallback: ["nvidia/gpt-oss-120b", "deepseek/deepseek-chat", "openai/gpt-4o-mini"],
     },
     MEDIUM: {
-      primary: "deepseek/deepseek-chat",
-      fallback: ["google/gemini-2.5-flash", "openai/gpt-4o-mini"],
+      primary: "xai/grok-code-fast-1", // Code specialist, $0.20/$1.50
+      fallback: ["deepseek/deepseek-chat", "xai/grok-4-fast-non-reasoning", "google/gemini-2.5-flash"],
     },
     COMPLEX: {
-      primary: "anthropic/claude-opus-4",
-      fallback: ["anthropic/claude-sonnet-4", "openai/gpt-4o"],
+      primary: "google/gemini-2.5-pro",
+      fallback: ["anthropic/claude-sonnet-4", "xai/grok-4-0709", "openai/gpt-4o"],
     },
     REASONING: {
-      primary: "deepseek/deepseek-reasoner",
-      fallback: ["moonshot/kimi-k2.5", "google/gemini-2.5-pro"],
+      primary: "xai/grok-4-fast-reasoning", // Ultra-cheap reasoning $0.20/$0.50
+      fallback: ["deepseek/deepseek-reasoner", "moonshot/kimi-k2.5", "google/gemini-2.5-pro"],
+    },
+  },
+
+  // Agentic tier configs - models that excel at multi-step autonomous tasks
+  agenticTiers: {
+    SIMPLE: {
+      primary: "anthropic/claude-haiku-4.5",
+      fallback: ["moonshot/kimi-k2.5", "xai/grok-4-fast-non-reasoning", "openai/gpt-4o-mini"],
+    },
+    MEDIUM: {
+      primary: "xai/grok-code-fast-1", // Code specialist for agentic coding
+      fallback: ["moonshot/kimi-k2.5", "anthropic/claude-haiku-4.5", "anthropic/claude-sonnet-4"],
+    },
+    COMPLEX: {
+      primary: "anthropic/claude-sonnet-4",
+      fallback: ["anthropic/claude-opus-4", "xai/grok-4-0709", "openai/gpt-4o"],
+    },
+    REASONING: {
+      primary: "xai/grok-4-fast-reasoning", // Cheap reasoning for agentic tasks
+      fallback: ["moonshot/kimi-k2.5", "anthropic/claude-sonnet-4", "deepseek/deepseek-reasoner"],
     },
   },
 
@@ -598,5 +692,6 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     maxTokensForceComplex: 100_000,
     structuredOutputMinTier: "MEDIUM",
     ambiguousDefaultTier: "MEDIUM",
+    agenticMode: false,
   },
 };

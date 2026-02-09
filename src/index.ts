@@ -34,6 +34,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { VERSION } from "./version.js";
 import { privateKeyToAccount } from "viem/accounts";
+import { getStats, formatStatsAscii } from "./stats.js";
 
 /**
  * Detect if we're running in shell completion mode.
@@ -280,6 +281,41 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 }
 
 /**
+ * /stats command handler for ClawRouter.
+ * Shows usage statistics and cost savings.
+ */
+async function createStatsCommand(): Promise<OpenClawPluginCommandDefinition> {
+  return {
+    name: "stats",
+    description: "Show ClawRouter usage statistics and cost savings",
+    acceptsArgs: true,
+    requireAuth: false,
+    handler: async (ctx: PluginCommandContext) => {
+      const arg = ctx.args?.trim().toLowerCase() || "7";
+      const days = parseInt(arg, 10) || 7;
+
+      try {
+        const stats = await getStats(Math.min(days, 30)); // Cap at 30 days
+        const ascii = formatStatsAscii(stats);
+
+        return {
+          text: [
+            "```",
+            ascii,
+            "```",
+          ].join("\n"),
+        };
+      } catch (err) {
+        return {
+          text: `Failed to load stats: ${err instanceof Error ? err.message : String(err)}`,
+          isError: true,
+        };
+      }
+    },
+  };
+}
+
+/**
  * /wallet command handler for ClawRouter.
  * - /wallet or /wallet status: Show wallet address, balance, and key file location
  * - /wallet export: Show private key for backup (with security warning)
@@ -438,6 +474,17 @@ const plugin: OpenClawPluginDefinition = {
         );
       });
 
+    // Register /stats command for usage statistics
+    createStatsCommand()
+      .then((statsCommand) => {
+        api.registerCommand(statsCommand);
+      })
+      .catch((err) => {
+        api.logger.warn(
+          `Failed to register /stats command: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+
     // Register a service with stop() for cleanup on gateway shutdown
     // This prevents EADDRINUSE when the gateway restarts
     api.registerService({
@@ -477,8 +524,17 @@ export default plugin;
 export { startProxy, getProxyPort } from "./proxy.js";
 export type { ProxyOptions, ProxyHandle, LowBalanceInfo, InsufficientFundsInfo } from "./proxy.js";
 export { blockrunProvider } from "./provider.js";
-export { OPENCLAW_MODELS, BLOCKRUN_MODELS, buildProviderModels } from "./models.js";
-export { route, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
+export {
+  OPENCLAW_MODELS,
+  BLOCKRUN_MODELS,
+  buildProviderModels,
+  MODEL_ALIASES,
+  resolveModelAlias,
+  isAgenticModel,
+  getAgenticModels,
+  getModelContextWindow,
+} from "./models.js";
+export { route, DEFAULT_ROUTING_CONFIG, getFallbackChain, getFallbackChainFiltered } from "./router/index.js";
 export type { RoutingDecision, RoutingConfig, Tier } from "./router/index.js";
 export { logUsage } from "./logger.js";
 export type { UsageEntry } from "./logger.js";
@@ -501,3 +557,7 @@ export {
 } from "./errors.js";
 export { fetchWithRetry, isRetryable, DEFAULT_RETRY_CONFIG } from "./retry.js";
 export type { RetryConfig } from "./retry.js";
+export { getStats, formatStatsAscii } from "./stats.js";
+export type { DailyStats, AggregatedStats } from "./stats.js";
+export { SessionStore, getSessionId, DEFAULT_SESSION_CONFIG } from "./session.js";
+export type { SessionEntry, SessionConfig } from "./session.js";

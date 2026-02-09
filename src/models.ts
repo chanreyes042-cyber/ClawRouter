@@ -10,6 +10,63 @@
 
 import type { ModelDefinitionConfig, ModelProviderConfig } from "./types.js";
 
+/**
+ * Model aliases for convenient shorthand access.
+ * Users can type `/model claude` instead of `/model blockrun/anthropic/claude-sonnet-4`.
+ */
+export const MODEL_ALIASES: Record<string, string> = {
+  // Claude
+  claude: "anthropic/claude-sonnet-4",
+  sonnet: "anthropic/claude-sonnet-4",
+  opus: "anthropic/claude-opus-4",
+  haiku: "anthropic/claude-haiku-4.5",
+
+  // OpenAI
+  gpt: "openai/gpt-4o",
+  gpt4: "openai/gpt-4o",
+  gpt5: "openai/gpt-5.2",
+  mini: "openai/gpt-4o-mini",
+  o3: "openai/o3",
+
+  // DeepSeek
+  deepseek: "deepseek/deepseek-chat",
+  reasoner: "deepseek/deepseek-reasoner",
+
+  // Kimi / Moonshot
+  kimi: "moonshot/kimi-k2.5",
+
+  // Google
+  gemini: "google/gemini-2.5-pro",
+  flash: "google/gemini-2.5-flash",
+
+  // xAI
+  grok: "xai/grok-3",
+  "grok-fast": "xai/grok-4-fast-reasoning",
+  "grok-code": "xai/grok-code-fast-1",
+
+  // NVIDIA
+  "nvidia": "nvidia/gpt-oss-120b",
+};
+
+/**
+ * Resolve a model alias to its full model ID.
+ * Returns the original model if not an alias.
+ */
+export function resolveModelAlias(model: string): string {
+  const normalized = model.trim().toLowerCase();
+  const resolved = MODEL_ALIASES[normalized];
+  if (resolved) return resolved;
+
+  // Check with "blockrun/" prefix stripped
+  if (normalized.startsWith("blockrun/")) {
+    const withoutPrefix = normalized.slice("blockrun/".length);
+    const resolvedWithoutPrefix = MODEL_ALIASES[withoutPrefix];
+    if (resolvedWithoutPrefix) return resolvedWithoutPrefix;
+  }
+
+  return model;
+}
+
 type BlockRunModel = {
   id: string;
   name: string;
@@ -19,6 +76,8 @@ type BlockRunModel = {
   maxOutput: number;
   reasoning?: boolean;
   vision?: boolean;
+  /** Models optimized for agentic workflows (multi-step autonomous tasks) */
+  agentic?: boolean;
 };
 
 export const BLOCKRUN_MODELS: BlockRunModel[] = [
@@ -43,6 +102,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 128000,
     reasoning: true,
     vision: true,
+    agentic: true,
   },
   {
     id: "openai/gpt-5-mini",
@@ -104,6 +164,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 128000,
     maxOutput: 16384,
     vision: true,
+    agentic: true,
   },
   {
     id: "openai/gpt-4o-mini",
@@ -153,7 +214,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
   },
   // o4-mini: Placeholder removed - model not yet released by OpenAI
 
-  // Anthropic
+  // Anthropic - all Claude models excel at agentic workflows
   {
     id: "anthropic/claude-haiku-4.5",
     name: "Claude Haiku 4.5",
@@ -161,6 +222,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 5.0,
     contextWindow: 200000,
     maxOutput: 8192,
+    agentic: true,
   },
   {
     id: "anthropic/claude-sonnet-4",
@@ -170,6 +232,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 64000,
     reasoning: true,
+    agentic: true,
   },
   {
     id: "anthropic/claude-opus-4",
@@ -179,6 +242,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 32000,
     reasoning: true,
+    agentic: true,
   },
   {
     id: "anthropic/claude-opus-4.5",
@@ -188,6 +252,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     contextWindow: 200000,
     maxOutput: 32000,
     reasoning: true,
+    agentic: true,
   },
 
   // Google
@@ -239,7 +304,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     reasoning: true,
   },
 
-  // Moonshot / Kimi
+  // Moonshot / Kimi - optimized for agentic workflows
   {
     id: "moonshot/kimi-k2.5",
     name: "Kimi K2.5",
@@ -249,6 +314,7 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     maxOutput: 8192,
     reasoning: true,
     vision: true,
+    agentic: true,
   },
 
   // xAI / Grok
@@ -277,6 +343,87 @@ export const BLOCKRUN_MODELS: BlockRunModel[] = [
     outputPrice: 0.5,
     contextWindow: 131072,
     maxOutput: 16384,
+  },
+
+  // xAI Grok 4 Family - Ultra-cheap fast models
+  {
+    id: "xai/grok-4-fast-reasoning",
+    name: "Grok 4 Fast Reasoning",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "xai/grok-4-fast-non-reasoning",
+    name: "Grok 4 Fast",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+  {
+    id: "xai/grok-4-1-fast-reasoning",
+    name: "Grok 4.1 Fast Reasoning",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "xai/grok-4-1-fast-non-reasoning",
+    name: "Grok 4.1 Fast",
+    inputPrice: 0.2,
+    outputPrice: 0.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+  },
+  {
+    id: "xai/grok-code-fast-1",
+    name: "Grok Code Fast",
+    inputPrice: 0.2,
+    outputPrice: 1.5,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    agentic: true, // Good for coding tasks
+  },
+  {
+    id: "xai/grok-4-0709",
+    name: "Grok 4 (0709)",
+    inputPrice: 3.0,
+    outputPrice: 15.0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    reasoning: true,
+  },
+  {
+    id: "xai/grok-2-vision",
+    name: "Grok 2 Vision",
+    inputPrice: 2.0,
+    outputPrice: 10.0,
+    contextWindow: 131072,
+    maxOutput: 16384,
+    vision: true,
+  },
+
+  // NVIDIA - Free/cheap models
+  {
+    id: "nvidia/gpt-oss-120b",
+    name: "NVIDIA GPT-OSS 120B",
+    inputPrice: 0,
+    outputPrice: 0,
+    contextWindow: 128000,
+    maxOutput: 8192,
+  },
+  {
+    id: "nvidia/kimi-k2.5",
+    name: "NVIDIA Kimi K2.5",
+    inputPrice: 0.001,
+    outputPrice: 0.001,
+    contextWindow: 262144,
+    maxOutput: 8192,
   },
 ];
 
@@ -317,4 +464,33 @@ export function buildProviderModels(baseUrl: string): ModelProviderConfig {
     api: "openai-completions",
     models: OPENCLAW_MODELS,
   };
+}
+
+/**
+ * Check if a model is optimized for agentic workflows.
+ * Agentic models continue autonomously with multi-step tasks
+ * instead of stopping and waiting for user input.
+ */
+export function isAgenticModel(modelId: string): boolean {
+  const model = BLOCKRUN_MODELS.find(
+    (m) => m.id === modelId || m.id === modelId.replace("blockrun/", ""),
+  );
+  return model?.agentic ?? false;
+}
+
+/**
+ * Get all agentic-capable models.
+ */
+export function getAgenticModels(): string[] {
+  return BLOCKRUN_MODELS.filter((m) => m.agentic).map((m) => m.id);
+}
+
+/**
+ * Get context window size for a model.
+ * Returns undefined if model not found.
+ */
+export function getModelContextWindow(modelId: string): number | undefined {
+  const normalized = modelId.replace("blockrun/", "");
+  const model = BLOCKRUN_MODELS.find((m) => m.id === normalized);
+  return model?.contextWindow;
 }

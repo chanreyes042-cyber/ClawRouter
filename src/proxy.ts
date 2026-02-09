@@ -28,22 +28,31 @@ import { createPaymentFetch, type PreAuthParams } from "./x402.js";
 import {
   route,
   getFallbackChain,
+  getFallbackChainFiltered,
   DEFAULT_ROUTING_CONFIG,
   type RouterOptions,
   type RoutingDecision,
   type RoutingConfig,
   type ModelPricing,
 } from "./router/index.js";
-import { BLOCKRUN_MODELS } from "./models.js";
+import { BLOCKRUN_MODELS, resolveModelAlias, getModelContextWindow } from "./models.js";
 import { logUsage, type UsageEntry } from "./logger.js";
+import { getStats } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
 import { BalanceMonitor } from "./balance.js";
 import { InsufficientFundsError, EmptyWalletError } from "./errors.js";
 import { USER_AGENT } from "./version.js";
+import {
+  SessionStore,
+  getSessionId,
+  DEFAULT_SESSION_CONFIG,
+  type SessionConfig,
+} from "./session.js";
 
 const BLOCKRUN_API = "https://blockrun.ai/api";
 const AUTO_MODEL = "blockrun/auto";
 const AUTO_MODEL_SHORT = "auto"; // OpenClaw strips provider prefix
+const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
 const DEFAULT_PORT = 8402;
@@ -253,6 +262,11 @@ export type ProxyOptions = {
   requestTimeoutMs?: number;
   /** Skip balance checks (for testing only). Default: false */
   skipBalanceCheck?: boolean;
+  /**
+   * Session persistence config. When enabled, maintains model selection
+   * across requests within a session to prevent mid-task model switching.
+   */
+  sessionConfig?: Partial<SessionConfig>;
   onReady?: (port: number) => void;
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
@@ -384,6 +398,9 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
   // Request deduplicator (shared across all requests)
   const deduplicator = new RequestDeduplicator();
 
+  // Session store for model persistence (prevents mid-task model switching)
+  const sessionStore = new SessionStore(options.sessionConfig);
+
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // Health check with optional balance info
     if (req.url === "/health" || req.url?.startsWith("/health?")) {
@@ -411,6 +428,42 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
       return;
     }
 
+    // Stats API endpoint - returns JSON for programmatic access
+    if (req.url === "/stats" || req.url?.startsWith("/stats?")) {
+      try {
+        const url = new URL(req.url, "http://localhost");
+        const days = parseInt(url.searchParams.get("days") || "7", 10);
+        const stats = await getStats(Math.min(days, 30));
+
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+        });
+        res.end(JSON.stringify(stats, null, 2));
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: `Failed to get stats: ${err instanceof Error ? err.message : String(err)}`,
+          }),
+        );
+      }
+      return;
+    }
+
+    // --- Handle /v1/models locally (no upstream call needed) ---
+    if (req.url === "/v1/models" && req.method === "GET") {
+      const models = BLOCKRUN_MODELS.filter((m) => m.id !== "blockrun/auto").map((m) => ({
+        id: m.id,
+        object: "model",
+        created: Math.floor(Date.now() / 1000),
+        owned_by: m.id.split("/")[0] || "unknown",
+      }));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ object: "list", data: models }));
+      return;
+    }
+
     // Only proxy paths starting with /v1
     if (!req.url?.startsWith("/v1")) {
       res.writeHead(404, { "Content-Type": "application/json" });
@@ -428,6 +481,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         routerOpts,
         deduplicator,
         balanceMonitor,
+        sessionStore,
       );
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -489,6 +543,7 @@ export async function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
         balanceMonitor,
         close: () =>
           new Promise<void>((res, rej) => {
+            sessionStore.close();
             server.close((err) => (err ? rej(err) : res()));
           }),
       });
@@ -605,6 +660,7 @@ async function proxyRequest(
   routerOpts: RouterOptions,
   deduplicator: RequestDeduplicator,
   balanceMonitor: BalanceMonitor,
+  sessionStore: SessionStore,
 ): Promise<void> {
   const startTime = Date.now();
 
@@ -643,40 +699,93 @@ async function proxyRequest(
       // Normalize model name for comparison (trim whitespace, lowercase)
       const normalizedModel =
         typeof parsed.model === "string" ? parsed.model.trim().toLowerCase() : "";
+
+      // Resolve model aliases (e.g., "claude" -> "anthropic/claude-sonnet-4")
+      const resolvedModel = resolveModelAlias(normalizedModel);
+      const wasAlias = resolvedModel !== normalizedModel;
+
       const isAutoModel =
         normalizedModel === AUTO_MODEL.toLowerCase() ||
         normalizedModel === AUTO_MODEL_SHORT.toLowerCase();
 
       // Debug: log received model name
       console.log(
-        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}", isAuto: ${isAutoModel}`,
+        `[ClawRouter] Received model: "${parsed.model}" -> normalized: "${normalizedModel}"${wasAlias ? ` -> alias: "${resolvedModel}"` : ""}, isAuto: ${isAutoModel}`,
       );
 
+      // If alias was resolved, update the model in the request
+      if (wasAlias && !isAutoModel) {
+        parsed.model = resolvedModel;
+        modelId = resolvedModel;
+        bodyModified = true;
+      }
+
       if (isAutoModel) {
-        // Extract prompt from messages
-        type ChatMessage = { role: string; content: string };
-        const messages = parsed.messages as ChatMessage[] | undefined;
-        let lastUserMsg: ChatMessage | undefined;
-        if (messages) {
-          for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === "user") {
-              lastUserMsg = messages[i];
-              break;
+        // Check for session persistence - use pinned model if available
+        const sessionId = getSessionId(req.headers as Record<string, string | string[] | undefined>);
+        const existingSession = sessionId ? sessionStore.getSession(sessionId) : undefined;
+
+        if (existingSession) {
+          // Use the session's pinned model instead of re-routing
+          console.log(
+            `[ClawRouter] Session ${sessionId?.slice(0, 8)}... using pinned model: ${existingSession.model}`,
+          );
+          parsed.model = existingSession.model;
+          modelId = existingSession.model;
+          bodyModified = true;
+          sessionStore.touchSession(sessionId!);
+        } else {
+          // No session or expired - route normally
+          // Extract prompt from messages
+          type ChatMessage = { role: string; content: string };
+          const messages = parsed.messages as ChatMessage[] | undefined;
+          let lastUserMsg: ChatMessage | undefined;
+          if (messages) {
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].role === "user") {
+                lastUserMsg = messages[i];
+                break;
+              }
             }
           }
+          const systemMsg = messages?.find((m: ChatMessage) => m.role === "system");
+          const prompt = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
+          const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : undefined;
+
+          // Detect tool requests - force agentic mode for better tool-use models
+          const tools = parsed.tools as unknown[] | undefined;
+          const hasTools = Array.isArray(tools) && tools.length > 0;
+          const effectiveRouterOpts = hasTools
+            ? {
+                ...routerOpts,
+                config: {
+                  ...routerOpts.config,
+                  overrides: { ...routerOpts.config.overrides, agenticMode: true },
+                },
+              }
+            : routerOpts;
+
+          if (hasTools) {
+            console.log(`[ClawRouter] Tools detected (${tools.length}), forcing agentic mode`);
+          }
+
+          routingDecision = route(prompt, systemPrompt, maxTokens, effectiveRouterOpts);
+
+          // Replace model in body
+          parsed.model = routingDecision.model;
+          modelId = routingDecision.model;
+          bodyModified = true;
+
+          // Pin this model to the session for future requests
+          if (sessionId) {
+            sessionStore.setSession(sessionId, routingDecision.model, routingDecision.tier);
+            console.log(
+              `[ClawRouter] Session ${sessionId.slice(0, 8)}... pinned to model: ${routingDecision.model}`,
+            );
+          }
+
+          options.onRouted?.(routingDecision);
         }
-        const systemMsg = messages?.find((m: ChatMessage) => m.role === "system");
-        const prompt = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
-        const systemPrompt = typeof systemMsg?.content === "string" ? systemMsg.content : undefined;
-
-        routingDecision = route(prompt, systemPrompt, maxTokens, routerOpts);
-
-        // Replace model in body
-        parsed.model = routingDecision.model;
-        modelId = routingDecision.model;
-        bodyModified = true;
-
-        options.onRouted?.(routingDecision);
       }
 
       // Rebuild body if modified
@@ -716,9 +825,11 @@ async function proxyRequest(
 
   // --- Pre-request balance check ---
   // Estimate cost and check if wallet has sufficient balance
-  // Skip if skipBalanceCheck is set (for testing)
+  // Skip if skipBalanceCheck is set (for testing) or if using free model
   let estimatedCostMicros: bigint | undefined;
-  if (modelId && !options.skipBalanceCheck) {
+  const isFreeModel = modelId === FREE_MODEL;
+
+  if (modelId && !options.skipBalanceCheck && !isFreeModel) {
     const estimated = estimateAmount(modelId, body.length, maxTokens);
     if (estimated) {
       estimatedCostMicros = BigInt(estimated);
@@ -731,35 +842,50 @@ async function proxyRequest(
       // Check balance before proceeding (using buffered amount)
       const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
 
-      if (sufficiency.info.isEmpty) {
-        // Wallet is empty — cannot proceed
-        deduplicator.removeInflight(dedupKey);
-        const error = new EmptyWalletError(sufficiency.info.walletAddress);
-        options.onInsufficientFunds?.({
-          balanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-          walletAddress: sufficiency.info.walletAddress,
-        });
-        throw error;
-      }
+      if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
+        // Wallet is empty or insufficient — fallback to free model if using auto routing
+        if (routingDecision) {
+          // User was using auto routing, fallback to free model
+          console.log(
+            `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} ($${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL}`,
+          );
+          modelId = FREE_MODEL;
+          // Update the body with new model
+          const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
+          parsed.model = FREE_MODEL;
+          body = Buffer.from(JSON.stringify(parsed));
 
-      if (!sufficiency.sufficient) {
-        // Insufficient balance — cannot proceed
-        deduplicator.removeInflight(dedupKey);
-        const error = new InsufficientFundsError({
-          currentBalanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-          walletAddress: sufficiency.info.walletAddress,
-        });
-        options.onInsufficientFunds?.({
-          balanceUSD: sufficiency.info.balanceUSD,
-          requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-          walletAddress: sufficiency.info.walletAddress,
-        });
-        throw error;
-      }
-
-      if (sufficiency.info.isLow) {
+          // Notify about the fallback (as low balance warning)
+          options.onLowBalance?.({
+            balanceUSD: sufficiency.info.balanceUSD,
+            walletAddress: sufficiency.info.walletAddress,
+          });
+        } else {
+          // User explicitly requested a paid model, throw error
+          deduplicator.removeInflight(dedupKey);
+          if (sufficiency.info.isEmpty) {
+            const error = new EmptyWalletError(sufficiency.info.walletAddress);
+            options.onInsufficientFunds?.({
+              balanceUSD: sufficiency.info.balanceUSD,
+              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
+              walletAddress: sufficiency.info.walletAddress,
+            });
+            throw error;
+          } else {
+            const error = new InsufficientFundsError({
+              currentBalanceUSD: sufficiency.info.balanceUSD,
+              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
+              walletAddress: sufficiency.info.walletAddress,
+            });
+            options.onInsufficientFunds?.({
+              balanceUSD: sufficiency.info.balanceUSD,
+              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
+              walletAddress: sufficiency.info.walletAddress,
+            });
+            throw error;
+          }
+        }
+      } else if (sufficiency.info.isLow) {
         // Balance is low but sufficient — warn and proceed
         options.onLowBalance?.({
           balanceUSD: sufficiency.info.balanceUSD,
@@ -836,9 +962,34 @@ async function proxyRequest(
     // Otherwise, just use the current model (no fallback for explicit model requests)
     let modelsToTry: string[];
     if (routingDecision) {
-      modelsToTry = getFallbackChain(routingDecision.tier, routerOpts.config.tiers);
+      // Estimate total context: input tokens (~4 chars per token) + max output tokens
+      const estimatedInputTokens = Math.ceil(body.length / 4);
+      const estimatedTotalTokens = estimatedInputTokens + maxTokens;
+
+      // Get tier configs (use agentic tiers if routing decided to use them)
+      const useAgenticTiers =
+        routingDecision.reasoning?.includes("agentic") && routerOpts.config.agenticTiers;
+      const tierConfigs = useAgenticTiers ? routerOpts.config.agenticTiers! : routerOpts.config.tiers;
+
+      // Get full chain first, then filter by context
+      const fullChain = getFallbackChain(routingDecision.tier, tierConfigs);
+      const contextFiltered = getFallbackChainFiltered(
+        routingDecision.tier,
+        tierConfigs,
+        estimatedTotalTokens,
+        getModelContextWindow,
+      );
+
+      // Log if models were filtered out due to context limits
+      const contextExcluded = fullChain.filter((m) => !contextFiltered.includes(m));
+      if (contextExcluded.length > 0) {
+        console.log(
+          `[ClawRouter] Context filter (~${estimatedTotalTokens} tokens): excluded ${contextExcluded.join(", ")}`,
+        );
+      }
+
       // Limit to MAX_FALLBACK_ATTEMPTS to prevent infinite loops
-      modelsToTry = modelsToTry.slice(0, MAX_FALLBACK_ATTEMPTS);
+      modelsToTry = contextFiltered.slice(0, MAX_FALLBACK_ATTEMPTS);
     } else {
       modelsToTry = modelId ? [modelId] : [];
     }
@@ -990,8 +1141,8 @@ async function proxyRequest(
             model?: string;
             choices?: Array<{
               index?: number;
-              message?: { role?: string; content?: string };
-              delta?: { role?: string; content?: string };
+              message?: { role?: string; content?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
+              delta?: { role?: string; content?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> };
               finish_reason?: string | null;
             }>;
             usage?: unknown;
@@ -1034,6 +1185,18 @@ async function proxyRequest(
                 responseChunks.push(Buffer.from(contentData));
               }
 
+              // Chunk 2b: tool_calls (forward tool calls from upstream)
+              const toolCalls = choice.message?.tool_calls ?? choice.delta?.tool_calls;
+              if (toolCalls && toolCalls.length > 0) {
+                const toolCallChunk = {
+                  ...baseChunk,
+                  choices: [{ index, delta: { tool_calls: toolCalls }, finish_reason: null }],
+                };
+                const toolCallData = `data: ${JSON.stringify(toolCallChunk)}\n\n`;
+                res.write(toolCallData);
+                responseChunks.push(Buffer.from(toolCallData));
+              }
+
               // Chunk 3: finish_reason (signals completion)
               const finishChunk = {
                 ...baseChunk,
@@ -1068,7 +1231,8 @@ async function proxyRequest(
       // Non-streaming: forward status and headers from upstream
       const responseHeaders: Record<string, string> = {};
       upstream.headers.forEach((value, key) => {
-        if (key === "transfer-encoding" || key === "connection") return;
+        // Skip hop-by-hop headers and content-encoding (fetch already decompresses)
+        if (key === "transfer-encoding" || key === "connection" || key === "content-encoding") return;
         responseHeaders[key] = value;
       });
 
@@ -1135,7 +1299,10 @@ async function proxyRequest(
     const entry: UsageEntry = {
       timestamp: new Date().toISOString(),
       model: routingDecision.model,
+      tier: routingDecision.tier,
       cost: routingDecision.costEstimate,
+      baselineCost: routingDecision.baselineCost,
+      savings: routingDecision.savings,
       latencyMs: Date.now() - startTime,
     };
     logUsage(entry).catch(() => {});

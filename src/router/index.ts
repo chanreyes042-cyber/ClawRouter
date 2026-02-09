@@ -36,14 +36,26 @@ export function route(
   const fullText = `${systemPrompt ?? ""} ${prompt}`;
   const estimatedTokens = Math.ceil(fullText.length / 4);
 
+  // --- Rule-based classification (runs first to get agenticScore) ---
+  const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
+
+  // Determine if agentic tiers should be used:
+  // 1. Explicit agenticMode config OR
+  // 2. Auto-detected agentic task (agenticScore >= 0.6)
+  const agenticScore = ruleResult.agenticScore ?? 0;
+  const isAutoAgentic = agenticScore >= 0.6;
+  const isExplicitAgentic = config.overrides.agenticMode ?? false;
+  const useAgenticTiers = (isAutoAgentic || isExplicitAgentic) && config.agenticTiers != null;
+  const tierConfigs = useAgenticTiers ? config.agenticTiers! : config.tiers;
+
   // --- Override: large context → force COMPLEX ---
   if (estimatedTokens > config.overrides.maxTokensForceComplex) {
     return selectModel(
       "COMPLEX",
       0.95,
       "rules",
-      `Input exceeds ${config.overrides.maxTokensForceComplex} tokens`,
-      config.tiers,
+      `Input exceeds ${config.overrides.maxTokensForceComplex} tokens${useAgenticTiers ? " | agentic" : ""}`,
+      tierConfigs,
       modelPricing,
       estimatedTokens,
       maxOutputTokens,
@@ -53,13 +65,10 @@ export function route(
   // Structured output detection
   const hasStructuredOutput = systemPrompt ? /json|structured|schema/i.test(systemPrompt) : false;
 
-  // --- Rule-based classification ---
-  const ruleResult = classifyByRules(prompt, systemPrompt, estimatedTokens, config.scoring);
-
   let tier: Tier;
   let confidence: number;
   const method: "rules" | "llm" = "rules";
-  let reasoning = `score=${ruleResult.score} | ${ruleResult.signals.join(", ")}`;
+  let reasoning = `score=${ruleResult.score.toFixed(2)} | ${ruleResult.signals.join(", ")}`;
 
   if (ruleResult.tier !== null) {
     tier = ruleResult.tier;
@@ -81,19 +90,26 @@ export function route(
     }
   }
 
+  // Add agentic mode indicator to reasoning
+  if (isAutoAgentic) {
+    reasoning += " | auto-agentic";
+  } else if (isExplicitAgentic) {
+    reasoning += " | agentic";
+  }
+
   return selectModel(
     tier,
     confidence,
     method,
     reasoning,
-    config.tiers,
+    tierConfigs,
     modelPricing,
     estimatedTokens,
     maxOutputTokens,
   );
 }
 
-export { getFallbackChain } from "./selector.js";
+export { getFallbackChain, getFallbackChainFiltered } from "./selector.js";
 export { DEFAULT_ROUTING_CONFIG } from "./config.js";
 export type { RoutingDecision, Tier, RoutingConfig } from "./types.js";
 export type { ModelPricing } from "./selector.js";
