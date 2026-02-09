@@ -1,8 +1,7 @@
+![GitHub Repo Banner](https://ghrb.waren.build/banner?header=%F0%9F%A6%9E+ClawRouter&subheader=Save+78%25+on+LLM+costs.+Automatically.&bg=FFF&color=BB2C2C&headerfont=Roboto&subheaderfont=Open+Sans&watermarkpos=top-right)
+<!-- Created with GitHub Repo Banner by Waren Gonzaga: https://ghrb.waren.build -->
+
 <div align="center">
-
-# ClawRouter
-
-**Save 78% on LLM costs. Automatically.**
 
 Route every request to the cheapest model that can handle it.
 One wallet, 30+ models, zero API keys.
