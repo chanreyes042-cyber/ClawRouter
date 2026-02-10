@@ -28,6 +28,24 @@ import { startProxy, getProxyPort } from "./proxy.js";
 import { resolveOrGenerateWalletKey, WALLET_FILE } from "./auth.js";
 import type { RoutingConfig } from "./router/index.js";
 import { BalanceMonitor } from "./balance.js";
+
+/**
+ * Wait for proxy health check to pass (quick check, not RPC).
+ * Returns true if healthy within timeout, false otherwise.
+ */
+async function waitForProxyHealth(port: number, timeoutMs = 3000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/health`);
+      if (res.ok) return true;
+    } catch {
+      // Proxy not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
 import { OPENCLAW_MODELS } from "./models.js";
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -253,33 +271,13 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
   // Resolve wallet key: saved file → env var → auto-generate
   const { key: walletKey, address, source } = await resolveOrGenerateWalletKey();
 
-  // Log wallet source
+  // Log wallet source (brief - balance check happens after proxy starts)
   if (source === "generated") {
     api.logger.info(`Generated new wallet: ${address}`);
-    api.logger.info(`Fund with USDC on Base to start using ClawRouter.`);
   } else if (source === "saved") {
     api.logger.info(`Using saved wallet: ${address}`);
   } else {
     api.logger.info(`Using wallet from BLOCKRUN_WALLET_KEY: ${address}`);
-  }
-
-  // --- Startup balance check ---
-  const startupMonitor = new BalanceMonitor(address);
-  try {
-    const startupBalance = await startupMonitor.checkBalance();
-    if (startupBalance.isEmpty) {
-      api.logger.warn(`[!] No USDC balance. Fund wallet to use ClawRouter: ${address}`);
-    } else if (startupBalance.isLow) {
-      api.logger.warn(
-        `[!] Low balance: ${startupBalance.balanceUSD} remaining. Fund wallet: ${address}`,
-      );
-    } else {
-      api.logger.info(`Wallet balance: ${startupBalance.balanceUSD}`);
-    }
-  } catch (err) {
-    api.logger.warn(
-      `Could not check wallet balance: ${err instanceof Error ? err.message : String(err)}`,
-    );
   }
 
   // Resolve routing config overrides from plugin config
@@ -313,7 +311,28 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 
   setActiveProxy(proxy);
   activeProxyHandle = proxy;
-  api.logger.info(`BlockRun provider active — smart routing enabled`);
+
+  api.logger.info(`ClawRouter ready — smart routing enabled`);
+  api.logger.info(`Pricing: Simple ~$0.001 | Code ~$0.01 | Complex ~$0.05 | Free: $0`);
+
+  // Non-blocking balance check AFTER proxy is ready (won't hang startup)
+  const startupMonitor = new BalanceMonitor(address);
+  startupMonitor
+    .checkBalance()
+    .then((balance) => {
+      if (balance.isEmpty) {
+        api.logger.info(`Wallet: ${address} | Balance: $0.00`);
+        api.logger.info(`Using FREE model. Fund wallet for premium models.`);
+      } else if (balance.isLow) {
+        api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD} (low)`);
+      } else {
+        api.logger.info(`Wallet: ${address} | Balance: ${balance.balanceUSD}`);
+      }
+    })
+    .catch(() => {
+      // Silently continue - balance will be checked per-request anyway
+      api.logger.info(`Wallet: ${address} | Balance: (checking...)`);
+    });
 }
 
 /**
@@ -441,7 +460,7 @@ const plugin: OpenClawPluginDefinition = {
   description: "Smart LLM router — 30+ models, x402 micropayments, 78% cost savings",
   version: VERSION,
 
-  register(api: OpenClawPluginApi) {
+  async register(api: OpenClawPluginApi) {
     // Check if ClawRouter is disabled via environment variable
     // Usage: CLAWROUTER_DISABLED=true openclaw gateway start
     const isDisabled =
@@ -540,13 +559,22 @@ const plugin: OpenClawPluginDefinition = {
       },
     });
 
-    // Start x402 proxy in background (fire-and-forget)
+    // Start x402 proxy and wait for it to be ready
     // Must happen in register() for CLI command support (services only start with gateway)
-    startProxyInBackground(api).catch((err) => {
+    try {
+      await startProxyInBackground(api);
+
+      // Wait for proxy to be healthy (quick HTTP check, no RPC)
+      const port = getProxyPort();
+      const healthy = await waitForProxyHealth(port);
+      if (!healthy) {
+        api.logger.warn(`Proxy health check timed out, commands may not work immediately`);
+      }
+    } catch (err) {
       api.logger.error(
         `Failed to start BlockRun proxy: ${err instanceof Error ? err.message : String(err)}`,
       );
-    });
+    }
   },
 };
 

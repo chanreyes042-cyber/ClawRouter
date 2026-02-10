@@ -15,9 +15,13 @@ export class InsufficientFundsError extends Error {
   readonly walletAddress: string;
 
   constructor(opts: { currentBalanceUSD: string; requiredUSD: string; walletAddress: string }) {
-    super(
-      `Insufficient USDC balance. Current: ${opts.currentBalanceUSD}, Required: ${opts.requiredUSD}. Fund wallet: ${opts.walletAddress}`,
-    );
+    const msg = [
+      `Insufficient balance. Current: ${opts.currentBalanceUSD}, Required: ${opts.requiredUSD}`,
+      `Options:`,
+      `  1. Fund wallet: ${opts.walletAddress}`,
+      `  2. Use free model: /model free`,
+    ].join("\n");
+    super(msg);
     this.name = "InsufficientFundsError";
     this.currentBalanceUSD = opts.currentBalanceUSD;
     this.requiredUSD = opts.requiredUSD;
@@ -33,7 +37,14 @@ export class EmptyWalletError extends Error {
   readonly walletAddress: string;
 
   constructor(walletAddress: string) {
-    super(`No USDC balance. Fund wallet to use ClawRouter: ${walletAddress}`);
+    const msg = [
+      `No USDC balance.`,
+      `Options:`,
+      `  1. Fund wallet: ${walletAddress}`,
+      `  2. Use free model: /model free`,
+      `  3. Uninstall: bash ~/.openclaw/extensions/clawrouter/scripts/uninstall.sh`,
+    ].join("\n");
+    super(msg);
     this.name = "EmptyWalletError";
     this.walletAddress = walletAddress;
   }

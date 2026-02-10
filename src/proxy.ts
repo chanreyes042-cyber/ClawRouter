@@ -241,6 +241,42 @@ function isGoogleModel(modelId: string): boolean {
   return modelId.startsWith("google/") || modelId.startsWith("gemini");
 }
 
+/**
+ * Extended message type for thinking-enabled conversations.
+ */
+type ExtendedChatMessage = ChatMessage & {
+  tool_calls?: unknown[];
+  reasoning_content?: unknown;
+};
+
+/**
+ * Normalize messages for thinking-enabled requests.
+ * When thinking/extended_thinking is enabled, assistant messages with tool_calls
+ * must have reasoning_content (can be empty string if not present).
+ * Error: "400 thinking is enabled but reasoning_content is missing in assistant tool call message"
+ */
+function normalizeMessagesForThinking(messages: ExtendedChatMessage[]): ExtendedChatMessage[] {
+  if (!messages || messages.length === 0) return messages;
+
+  let hasChanges = false;
+  const normalized = messages.map((msg) => {
+    // Only process assistant messages with tool_calls that lack reasoning_content
+    if (
+      msg.role === "assistant" &&
+      msg.tool_calls &&
+      Array.isArray(msg.tool_calls) &&
+      msg.tool_calls.length > 0 &&
+      msg.reasoning_content === undefined
+    ) {
+      hasChanges = true;
+      return { ...msg, reasoning_content: "" };
+    }
+    return msg;
+  });
+
+  return hasChanges ? normalized : messages;
+}
+
 // Kimi/Moonshot models use special Unicode tokens for thinking boundaries.
 // Pattern: <｜begin▁of▁thinking｜>content<｜end▁of▁thinking｜>
 // The ｜ is fullwidth vertical bar (U+FF5C), ▁ is lower one-eighth block (U+2581).
@@ -631,6 +667,11 @@ async function tryModelRequest(
       parsed.messages = normalizeMessagesForGoogle(parsed.messages as ChatMessage[]);
     }
 
+    // Normalize messages for thinking-enabled requests (add reasoning_content to tool calls)
+    if (parsed.thinking && Array.isArray(parsed.messages)) {
+      parsed.messages = normalizeMessagesForThinking(parsed.messages as ExtendedChatMessage[]);
+    }
+
     requestBody = Buffer.from(JSON.stringify(parsed));
   } catch {
     // If body isn't valid JSON, use as-is
@@ -887,48 +928,23 @@ async function proxyRequest(
       const sufficiency = await balanceMonitor.checkSufficient(bufferedCostMicros);
 
       if (sufficiency.info.isEmpty || !sufficiency.sufficient) {
-        // Wallet is empty or insufficient — fallback to free model if using auto routing
-        if (routingDecision) {
-          // User was using auto routing, fallback to free model
-          console.log(
-            `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} ($${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL}`,
-          );
-          modelId = FREE_MODEL;
-          // Update the body with new model
-          const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
-          parsed.model = FREE_MODEL;
-          body = Buffer.from(JSON.stringify(parsed));
+        // Wallet is empty or insufficient — ALWAYS fallback to free model
+        // This ensures new users with empty wallets can still use ClawRouter
+        const originalModel = modelId;
+        console.log(
+          `[ClawRouter] Wallet ${sufficiency.info.isEmpty ? "empty" : "insufficient"} ($${sufficiency.info.balanceUSD}), falling back to free model: ${FREE_MODEL} (requested: ${originalModel})`,
+        );
+        modelId = FREE_MODEL;
+        // Update the body with new model
+        const parsed = JSON.parse(body.toString()) as Record<string, unknown>;
+        parsed.model = FREE_MODEL;
+        body = Buffer.from(JSON.stringify(parsed));
 
-          // Notify about the fallback (as low balance warning)
-          options.onLowBalance?.({
-            balanceUSD: sufficiency.info.balanceUSD,
-            walletAddress: sufficiency.info.walletAddress,
-          });
-        } else {
-          // User explicitly requested a paid model, throw error
-          deduplicator.removeInflight(dedupKey);
-          if (sufficiency.info.isEmpty) {
-            const error = new EmptyWalletError(sufficiency.info.walletAddress);
-            options.onInsufficientFunds?.({
-              balanceUSD: sufficiency.info.balanceUSD,
-              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-              walletAddress: sufficiency.info.walletAddress,
-            });
-            throw error;
-          } else {
-            const error = new InsufficientFundsError({
-              currentBalanceUSD: sufficiency.info.balanceUSD,
-              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-              walletAddress: sufficiency.info.walletAddress,
-            });
-            options.onInsufficientFunds?.({
-              balanceUSD: sufficiency.info.balanceUSD,
-              requiredUSD: balanceMonitor.formatUSDC(bufferedCostMicros),
-              walletAddress: sufficiency.info.walletAddress,
-            });
-            throw error;
-          }
-        }
+        // Notify about the fallback
+        options.onLowBalance?.({
+          balanceUSD: sufficiency.info.balanceUSD,
+          walletAddress: sufficiency.info.walletAddress,
+        });
       } else if (sufficiency.info.isLow) {
         // Balance is low but sufficient — warn and proceed
         options.onLowBalance?.({
