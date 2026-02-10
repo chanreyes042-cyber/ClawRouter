@@ -624,7 +624,7 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
     tierBoundaries: {
       simpleMedium: 0.0,
       mediumComplex: 0.18,
-      complexReasoning: 0.40, // Raised from 0.25 - requires strong reasoning signals
+      complexReasoning: 0.4, // Raised from 0.25 - requires strong reasoning signals
     },
 
     // Sigmoid steepness for confidence calibration
