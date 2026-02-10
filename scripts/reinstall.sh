@@ -133,8 +133,8 @@ if (fs.existsSync(configPath)) {
 }
 "
 
-# 7. Enable smart routing and ensure apiKey is present for /model picker
-echo "→ Enabling smart routing..."
+# 7. Ensure apiKey is present for /model picker (but DON'T override default model)
+echo "→ Finalizing setup..."
 node -e "
 const os = require('os');
 const fs = require('fs');
@@ -144,23 +144,18 @@ const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
 if (fs.existsSync(configPath)) {
   try {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-    // Ensure agents.defaults.model.primary exists
-    if (!config.agents) config.agents = {};
-    if (!config.agents.defaults) config.agents.defaults = {};
-    if (!config.agents.defaults.model) config.agents.defaults.model = {};
-
-    // Set smart routing as default
-    config.agents.defaults.model.primary = 'blockrun/auto';
+    let changed = false;
 
     // Ensure blockrun provider has apiKey (required by ModelRegistry for /model picker)
     if (config.models?.providers?.blockrun && !config.models.providers.blockrun.apiKey) {
       config.models.providers.blockrun.apiKey = 'x402-proxy-handles-auth';
       console.log('  Added apiKey to blockrun provider config');
+      changed = true;
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log('  Smart routing enabled: blockrun/auto');
+    if (changed) {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    }
   } catch (e) {
     console.log('  Could not update config:', e.message);
   }
@@ -170,4 +165,14 @@ if (fs.existsSync(configPath)) {
 "
 
 echo ""
-echo "✓ Done! Run: openclaw gateway restart"
+echo "✓ ClawRouter installed! Run: openclaw gateway restart"
+echo ""
+echo "Enable smart routing (auto-picks cheapest model):"
+echo "  /model blockrun/auto"
+echo ""
+echo "Or use specific models:"
+echo "  /model sonnet    → anthropic/claude-sonnet-4"
+echo "  /model deepseek  → deepseek/deepseek-chat"
+echo "  /model free      → gpt-oss-120b (FREE)"
+echo ""
+echo "To uninstall: bash ~/.openclaw/extensions/clawrouter/scripts/uninstall.sh"

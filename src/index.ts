@@ -102,33 +102,43 @@ function injectModelsConfig(logger: { info: (msg: string) => void }): void {
       }
     }
 
-    // Set blockrun/auto as default model (path: agents.defaults.model.primary)
+    // NOTE: We intentionally do NOT set agents.defaults.model.primary here.
+    // Users should opt-in to smart routing via: /model blockrun/auto
+    // This avoids breaking existing setups that use other providers.
+
+    // Add key model aliases to allowlist (if one exists) for /model picker visibility
+    // Only add essential aliases, not all 50+ models to avoid config pollution
+    const KEY_MODEL_ALIASES = [
+      { id: "auto", alias: "auto" },
+      { id: "free", alias: "free" },
+      { id: "sonnet", alias: "sonnet" },
+      { id: "opus", alias: "opus" },
+      { id: "haiku", alias: "haiku" },
+      { id: "grok", alias: "grok" },
+      { id: "deepseek", alias: "deepseek" },
+      { id: "kimi", alias: "kimi" },
+      { id: "gemini", alias: "gemini" },
+      { id: "flash", alias: "flash" },
+      { id: "gpt", alias: "gpt" },
+      { id: "reasoner", alias: "reasoner" },
+    ];
+
     if (!config.agents) config.agents = {};
     if (!config.agents.defaults) config.agents.defaults = {};
-    if (!config.agents.defaults.model) config.agents.defaults.model = {};
-    if (config.agents.defaults.model.primary !== "blockrun/auto") {
-      config.agents.defaults.model.primary = "blockrun/auto";
-      needsWrite = true;
-    }
+    if (!config.agents.defaults.models) config.agents.defaults.models = {};
 
-    // Add ALL blockrun models to allowlist if one exists (agents.defaults.models)
-    // This ensures /model blockrun/xxx works for any registered model
-    if (config.agents.defaults.models && typeof config.agents.defaults.models === "object") {
-      const allowlist = config.agents.defaults.models as Record<string, unknown>;
-      for (const model of OPENCLAW_MODELS) {
-        const fullId = `blockrun/${model.id}`;
-        if (!allowlist[fullId]) {
-          // Use last part of model ID as alias (e.g., "openai/gpt-4o" -> "gpt-4o")
-          const alias = model.id.includes("/") ? model.id.split("/").pop() : model.id;
-          allowlist[fullId] = { alias };
-          needsWrite = true;
-        }
+    const allowlist = config.agents.defaults.models as Record<string, unknown>;
+    for (const m of KEY_MODEL_ALIASES) {
+      const fullId = `blockrun/${m.id}`;
+      if (!allowlist[fullId]) {
+        allowlist[fullId] = { alias: m.alias };
+        needsWrite = true;
       }
     }
 
     if (needsWrite) {
       writeFileSync(configPath, JSON.stringify(config, null, 2));
-      logger.info("Set default model to blockrun/auto (smart routing enabled)");
+      logger.info("BlockRun provider configured");
     }
   } catch {
     // Silently fail — config injection is best-effort
@@ -298,7 +308,7 @@ async function startProxyInBackground(api: OpenClawPluginApi): Promise<void> {
 
   setActiveProxy(proxy);
   activeProxyHandle = proxy;
-  api.logger.info(`BlockRun provider active — ${proxy.baseUrl}/v1 (smart routing enabled)`);
+  api.logger.info(`BlockRun provider ready — use /model blockrun/auto for smart routing`);
 }
 
 /**
@@ -470,13 +480,9 @@ const plugin: OpenClawPluginDefinition = {
       models: OPENCLAW_MODELS,
     };
 
-    // Set blockrun/auto as default for smart routing (agents.defaults.model.primary)
-    if (!api.config.agents) api.config.agents = {};
-    const agents = api.config.agents as Record<string, unknown>;
-    if (!agents.defaults) agents.defaults = {};
-    const defaults = agents.defaults as Record<string, unknown>;
-    if (!defaults.model) defaults.model = {};
-    (defaults.model as Record<string, unknown>).primary = "blockrun/auto";
+    // NOTE: We intentionally do NOT override api.config.agents.defaults.model.primary
+    // Users should opt-in to smart routing via: /model blockrun/auto
+    // This avoids breaking existing setups that use other providers.
 
     api.logger.info("BlockRun provider registered (30+ models via x402)");
 
