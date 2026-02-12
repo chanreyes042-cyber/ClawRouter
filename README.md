@@ -21,10 +21,10 @@ One wallet, 30+ models, zero API keys.
 ---
 
 ```
-"What is 2+2?"            → DeepSeek        $0.27/M    saved 99%
-"Summarize this article"  → GPT-4o-mini     $0.60/M    saved 99%
-"Build a React component" → Claude Sonnet   $15.00/M   best balance
-"Prove this theorem"      → DeepSeek-R      $0.42/M    reasoning
+"What is 2+2?"            → NVIDIA Kimi     $0.001/M   saved ~100%
+"Summarize this article"  → Grok Code Fast  $1.50/M    saved 94%
+"Build a React component" → Gemini 2.5 Pro  $10.00/M   best balance
+"Prove this theorem"      → Grok 4.1 Fast   $0.50/M    reasoning
 "Run 50 parallel searches"→ Kimi K2.5       $2.40/M    agentic swarm
 ```
 
@@ -112,18 +112,18 @@ Request → Weighted Scorer (15 dimensions)
               └── Low confidence → Default to MEDIUM tier → Done
 ```
 
-No external classifier calls. Ambiguous queries default to the MEDIUM tier (DeepSeek/GPT-4o-mini) — fast, cheap, and good enough for most tasks.
+No external classifier calls. Ambiguous queries default to the MEDIUM tier (Grok Code Fast) — fast, cheap, and good enough for most tasks.
 
 **Deep dive:** [15-dimension scoring weights](docs/configuration.md#scoring-weights) | [Architecture](docs/architecture.md)
 
 ### Tier → Model Mapping
 
-| Tier      | Primary Model         | Cost/M | Savings vs Opus |
-| --------- | --------------------- | ------ | --------------- |
-| SIMPLE    | gemini-2.5-flash      | $0.60  | **99.2%**       |
-| MEDIUM    | grok-code-fast-1      | $1.50  | **98.0%**       |
-| COMPLEX   | gemini-2.5-pro        | $10.00 | **86.7%**       |
-| REASONING | grok-4-fast-reasoning | $0.50  | **99.3%**       |
+| Tier      | Primary Model         | Cost/M  | Savings vs Opus |
+| --------- | --------------------- | ------- | --------------- |
+| SIMPLE    | nvidia/kimi-k2.5      | $0.001  | **~100%**       |
+| MEDIUM    | grok-code-fast-1      | $1.50   | **94.0%**       |
+| COMPLEX   | gemini-2.5-pro        | $10.00  | **60.0%**       |
+| REASONING | grok-4-1-fast-reasoning | $0.50 | **98.0%**       |
 
 Special rule: 2+ reasoning markers → REASONING at 0.97 confidence.
 
@@ -144,13 +144,13 @@ ClawRouter v0.5+ includes intelligent features that work automatically:
 
 | Tier                | % of Traffic | Cost/M      |
 | ------------------- | ------------ | ----------- |
-| SIMPLE              | ~45%         | $0.27       |
-| MEDIUM              | ~35%         | $0.60       |
-| COMPLEX             | ~15%         | $15.00      |
-| REASONING           | ~5%          | $10.00      |
-| **Blended average** |              | **$3.17/M** |
+| SIMPLE              | ~45%         | $0.001      |
+| MEDIUM              | ~35%         | $1.50       |
+| COMPLEX             | ~15%         | $10.00      |
+| REASONING           | ~5%          | $0.50       |
+| **Blended average** |              | **$2.05/M** |
 
-Compared to **$75/M** for Claude Opus = **96% savings** on a typical workload.
+Compared to **$25/M** for Claude Opus = **92% savings** on a typical workload.
 
 ---
 

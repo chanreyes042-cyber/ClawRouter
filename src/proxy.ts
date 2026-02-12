@@ -117,7 +117,34 @@ function transformPaymentError(errorBody: string): string {
             });
           }
         }
+
+        // Handle invalid_payload errors (signature issues, malformed payment)
+        if (innerJson.invalidReason === "invalid_payload") {
+          return JSON.stringify({
+            error: {
+              message: "Payment signature invalid. This may be a temporary issue.",
+              type: "invalid_payload",
+              help: "Try again. If this persists, reinstall ClawRouter: curl -fsSL https://blockrun.ai/ClawRouter-update | bash",
+            },
+          });
+        }
       }
+    }
+
+    // Handle settlement failures (gas estimation, on-chain errors)
+    if (parsed.error === "Settlement failed" || parsed.details?.includes("Settlement failed")) {
+      const details = parsed.details || "";
+      const gasError = details.includes("unable to estimate gas");
+
+      return JSON.stringify({
+        error: {
+          message: gasError
+            ? "Payment failed: network congestion or gas issue. Try again."
+            : "Payment settlement failed. Try again in a moment.",
+          type: "settlement_failed",
+          help: "This is usually temporary. If it persists, try: /model free",
+        },
+      });
     }
   } catch {
     // If parsing fails, return original
