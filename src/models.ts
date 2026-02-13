@@ -44,11 +44,13 @@ export const MODEL_ALIASES: Record<string, string> = {
   "grok-fast": "xai/grok-4-fast-reasoning",
   "grok-code": "xai/grok-code-fast-1",
 
-  // NVIDIA (free)
+  // NVIDIA
   nvidia: "nvidia/gpt-oss-120b",
   "gpt-120b": "nvidia/gpt-oss-120b",
   "gpt-20b": "nvidia/gpt-oss-20b",
-  free: "nvidia/gpt-oss-120b",
+
+  // Note: auto, free, eco, premium are virtual routing profiles registered in BLOCKRUN_MODELS
+  // They don't need aliases since they're already top-level model IDs
 };
 
 /**

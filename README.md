@@ -44,15 +44,15 @@ _The world's first hackathon run entirely by AI agents, powered by USDC_
 
 ## Quick Start (2 mins)
 
+**Inspired by Andreas** — we've updated our installation script:
+
 ```bash
 # 1. Install with smart routing enabled by default
-curl -fsSL https://raw.githubusercontent.com/BlockRunAI/ClawRouter/main/scripts/reinstall.sh | bash
+curl -fsSL https://blockrun.ai/ClawRouter-update | bash
+openclaw gateway restart
 
 # 2. Fund your wallet with USDC on Base (address printed on install)
 # $5 is enough for thousands of requests
-
-# 3. Restart OpenClaw gateway
-openclaw gateway restart
 ```
 
 Done! Smart routing (`blockrun/auto`) is now your default model.
@@ -335,7 +335,7 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 Quick checklist:
 
 ```bash
-# Check version (should be 0.8.20+)
+# Check version (should be 0.8.21+)
 cat ~/.openclaw/extensions/clawrouter/package.json | grep version
 
 # Check proxy running
@@ -343,6 +343,7 @@ curl http://localhost:8402/health
 
 # Update to latest version
 curl -fsSL https://blockrun.ai/ClawRouter-update | bash
+openclaw gateway restart
 ```
 
 ClawRouter automatically checks for updates on startup and shows a notification if a newer version is available.
