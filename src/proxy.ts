@@ -47,6 +47,7 @@ import { logUsage, type UsageEntry } from "./logger.js";
 import { getStats } from "./stats.js";
 import { RequestDeduplicator } from "./dedup.js";
 import { BalanceMonitor } from "./balance.js";
+import { compressContext, shouldCompress, type NormalizedMessage } from "./compression/index.js";
 // Error classes available for programmatic use but not used in proxy
 // (universal free fallback means we don't throw balance errors anymore)
 // import { InsufficientFundsError, EmptyWalletError } from "./errors.js";
@@ -72,7 +73,7 @@ const ROUTING_PROFILES = new Set([
 const FREE_MODEL = "nvidia/gpt-oss-120b"; // Free model for empty wallet fallback
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 180_000; // 3 minutes (allows for on-chain tx + LLM response)
-const MAX_FALLBACK_ATTEMPTS = 3; // Maximum models to try in fallback chain
+const MAX_FALLBACK_ATTEMPTS = 5; // Maximum models to try in fallback chain (increased from 3 to ensure cheap models are tried)
 const HEALTH_CHECK_TIMEOUT_MS = 2_000; // Timeout for checking existing proxy
 const RATE_LIMIT_COOLDOWN_MS = 60_000; // 60 seconds cooldown for rate-limited models
 const PORT_RETRY_ATTEMPTS = 5; // Max attempts to bind port (handles TIME_WAIT)
@@ -294,6 +295,9 @@ const PROVIDER_ERROR_PATTERNS = [
   /temporarily.*unavailable/i,
   /api.*key.*invalid/i,
   /authentication.*failed/i,
+  /request too large/i,
+  /request.*size.*exceeds/i,
+  /payload too large/i,
 ];
 
 /**
@@ -652,6 +656,24 @@ export type ProxyOptions = {
    * across requests within a session to prevent mid-task model switching.
    */
   sessionConfig?: Partial<SessionConfig>;
+  /**
+   * Auto-compress large requests to fit within API limits.
+   * When enabled, requests approaching 200KB are automatically compressed using
+   * LLM-safe context compression (15-40% reduction).
+   * Default: true
+   */
+  autoCompressRequests?: boolean;
+  /**
+   * Threshold in KB to trigger auto-compression (default: 180).
+   * Requests larger than this are compressed before sending.
+   * Set to 0 to compress all requests.
+   */
+  compressionThresholdKB?: number;
+  /**
+   * Maximum request size in KB after compression (default: 200).
+   * Hard limit enforced by BlockRun API.
+   */
+  maxRequestSizeKB?: number;
   onReady?: (port: number) => void;
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
@@ -1381,6 +1403,94 @@ async function proxyRequest(
       console.error(`[ClawRouter] Routing error: ${errorMsg}`);
       options.onError?.(new Error(`Routing failed: ${errorMsg}`));
     }
+  }
+
+  // --- Auto-compression ---
+  // Compress large requests to fit within BlockRun API's 200KB limit
+  const autoCompress = options.autoCompressRequests ?? true;
+  const compressionThreshold = options.compressionThresholdKB ?? 180;
+  const sizeLimit = options.maxRequestSizeKB ?? 200;
+  const requestSizeKB = Math.ceil(body.length / 1024);
+
+  if (autoCompress && requestSizeKB > compressionThreshold) {
+    try {
+      console.log(`[ClawRouter] Request size ${requestSizeKB}KB exceeds threshold ${compressionThreshold}KB, applying compression...`);
+
+      // Parse messages for compression
+      const parsed = JSON.parse(body.toString()) as { messages?: NormalizedMessage[]; [key: string]: unknown };
+
+      if (parsed.messages && parsed.messages.length > 0 && shouldCompress(parsed.messages)) {
+        // Apply compression with conservative settings
+        const compressionResult = await compressContext(parsed.messages, {
+          enabled: true,
+          preserveRaw: false, // Don't need originals in proxy
+          layers: {
+            deduplication: true,   // Safe: removes duplicate messages
+            whitespace: true,      // Safe: normalizes whitespace
+            dictionary: false,     // Disabled: requires model to understand codebook
+            paths: false,          // Disabled: requires model to understand path codes
+            jsonCompact: true,     // Safe: just removes JSON whitespace
+            observation: false,    // Disabled: may lose important context
+            dynamicCodebook: false, // Disabled: requires model to understand codes
+          },
+          dictionary: {
+            maxEntries: 50,
+            minPhraseLength: 15,
+            includeCodebookHeader: false,
+          },
+        });
+
+        const compressedSizeKB = Math.ceil(compressionResult.compressedChars / 1024);
+        const savings = ((requestSizeKB - compressedSizeKB) / requestSizeKB * 100).toFixed(1);
+
+        console.log(
+          `[ClawRouter] Compressed ${requestSizeKB}KB → ${compressedSizeKB}KB (${savings}% reduction)`
+        );
+
+        // Update request body with compressed messages
+        parsed.messages = compressionResult.messages;
+        body = Buffer.from(JSON.stringify(parsed));
+
+        // If still too large after compression, reject
+        if (compressedSizeKB > sizeLimit) {
+          const errorMsg = {
+            error: {
+              message: `Request size ${compressedSizeKB}KB still exceeds limit after compression (original: ${requestSizeKB}KB). Please reduce context size.`,
+              type: "request_too_large",
+              original_size_kb: requestSizeKB,
+              compressed_size_kb: compressedSizeKB,
+              limit_kb: sizeLimit,
+              help: "Try: 1) Remove old messages from history, 2) Summarize large tool results, 3) Use direct API for very large contexts",
+            },
+          };
+
+          res.writeHead(413, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(errorMsg));
+          return;
+        }
+      }
+    } catch (err) {
+      // Compression failed - continue with original request
+      console.warn(`[ClawRouter] Compression failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Pre-validate request size even if compression wasn't attempted
+  const finalSizeKB = Math.ceil(body.length / 1024);
+  if (finalSizeKB > sizeLimit) {
+    const errorMsg = {
+      error: {
+        message: `Request size ${finalSizeKB}KB exceeds limit ${sizeLimit}KB. Please reduce context size.`,
+        type: "request_too_large",
+        size_kb: finalSizeKB,
+        limit_kb: sizeLimit,
+        help: "Try: 1) Remove old messages from history, 2) Summarize large tool results, 3) Enable compression (autoCompressRequests: true)",
+      },
+    };
+
+    res.writeHead(413, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(errorMsg));
+    return;
   }
 
   // --- Dedup check ---
