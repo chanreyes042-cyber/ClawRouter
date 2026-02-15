@@ -658,8 +658,8 @@ export type ProxyOptions = {
    */
   sessionConfig?: Partial<SessionConfig>;
   /**
-   * Auto-compress large requests to fit within API limits.
-   * When enabled, requests approaching 200KB are automatically compressed using
+   * Auto-compress large requests to reduce network usage.
+   * When enabled, requests are automatically compressed using
    * LLM-safe context compression (15-40% reduction).
    * Default: true
    */
@@ -670,11 +670,6 @@ export type ProxyOptions = {
    * Set to 0 to compress all requests.
    */
   compressionThresholdKB?: number;
-  /**
-   * Maximum request size in KB after compression (default: 200).
-   * Hard limit enforced by BlockRun API.
-   */
-  maxRequestSizeKB?: number;
   onReady?: (port: number) => void;
   onError?: (error: Error) => void;
   onPayment?: (info: { model: string; amount: string; network: string }) => void;
@@ -1409,10 +1404,9 @@ async function proxyRequest(
   }
 
   // --- Auto-compression ---
-  // Compress large requests to fit within BlockRun API's 200KB limit
+  // Compress large requests to reduce network usage and improve performance
   const autoCompress = options.autoCompressRequests ?? true;
   const compressionThreshold = options.compressionThresholdKB ?? 180;
-  const sizeLimit = options.maxRequestSizeKB ?? 200;
   const requestSizeKB = Math.ceil(body.length / 1024);
 
   if (autoCompress && requestSizeKB > compressionThreshold) {
@@ -1458,24 +1452,6 @@ async function proxyRequest(
         // Update request body with compressed messages
         parsed.messages = compressionResult.messages;
         body = Buffer.from(JSON.stringify(parsed));
-
-        // If still too large after compression, reject
-        if (compressedSizeKB > sizeLimit) {
-          const errorMsg = {
-            error: {
-              message: `Request size ${compressedSizeKB}KB still exceeds limit after compression (original: ${requestSizeKB}KB). Please reduce context size.`,
-              type: "request_too_large",
-              original_size_kb: requestSizeKB,
-              compressed_size_kb: compressedSizeKB,
-              limit_kb: sizeLimit,
-              help: "Try: 1) Remove old messages from history, 2) Summarize large tool results, 3) Use direct API for very large contexts",
-            },
-          };
-
-          res.writeHead(413, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(errorMsg));
-          return;
-        }
       }
     } catch (err) {
       // Compression failed - continue with original request
@@ -1483,24 +1459,6 @@ async function proxyRequest(
         `[ClawRouter] Compression failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-  }
-
-  // Pre-validate request size even if compression wasn't attempted
-  const finalSizeKB = Math.ceil(body.length / 1024);
-  if (finalSizeKB > sizeLimit) {
-    const errorMsg = {
-      error: {
-        message: `Request size ${finalSizeKB}KB exceeds limit ${sizeLimit}KB. Please reduce context size.`,
-        type: "request_too_large",
-        size_kb: finalSizeKB,
-        limit_kb: sizeLimit,
-        help: "Try: 1) Remove old messages from history, 2) Summarize large tool results, 3) Enable compression (autoCompressRequests: true)",
-      },
-    };
-
-    res.writeHead(413, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(errorMsg));
-    return;
   }
 
   // --- Dedup check ---

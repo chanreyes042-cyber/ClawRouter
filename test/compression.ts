@@ -1,11 +1,10 @@
 /**
- * Test for request compression and size validation.
+ * Test for request compression.
  *
  * Tests that:
  * 1. Large requests are automatically compressed
- * 2. Oversized requests are rejected BEFORE payment
- * 3. Tool calls are preserved during compression
- * 4. Size error patterns prevent wasted fallback attempts
+ * 2. Tool calls are preserved during compression
+ * 3. Compression reduces request size effectively
  *
  * Usage:
  *   npx tsx test/compression.ts
@@ -37,21 +36,6 @@ async function startMockServer(): Promise<{ port: number; close: () => Promise<v
       // Track payment attempt (x-payment header means payment was attempted)
       if (req.headers["x-payment"]) {
         paymentAttempts.push(Date.now());
-      }
-
-      const contentLength = Buffer.byteLength(body);
-
-      // Simulate BlockRun's 200KB size limit
-      if (contentLength > 200 * 1024) {
-        console.log(`  [MockAPI] Request too large: ${Math.round(contentLength / 1024)}KB`);
-        res.writeHead(413, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: "Request too large",
-            message: `Request size ${Math.round(contentLength / 1024)}KB exceeds limit 200KB`,
-          }),
-        );
-        return;
       }
 
       // Success response
@@ -123,7 +107,6 @@ async function runTests() {
     skipBalanceCheck: true,
     autoCompressRequests: true, // Enable compression
     compressionThresholdKB: 50, // Lower threshold for testing
-    maxRequestSizeKB: 200,
     onReady: (port) => console.log(`ClawRouter proxy started on port ${port}`),
   });
 
@@ -179,16 +162,8 @@ async function runTests() {
     });
 
     // With conservative compression (whitespace + deduplication + jsonCompact),
-    // we expect the request to pass if under 200KB or be rejected if over
-    const expectedToPass = originalSize < 200 * 1024;
-
-    if (expectedToPass) {
-      assert(res.ok, `Request passes with compression: ${res.status}`);
-    } else {
-      // If original is >200KB, compression happens but may not be enough
-      console.log(`  Note: Original ${Math.round(originalSize / 1024)}KB, compression attempted`);
-      assert(true, "Compression was attempted (see logs above)");
-    }
+    // all requests should pass regardless of size
+    assert(res.ok, `Request passes with compression: ${res.status}`);
   }
 
   // Test 3: Tool call preservation
@@ -262,13 +237,13 @@ async function runTests() {
     );
   }
 
-  // Test 4: Oversized request rejected BEFORE payment
+  // Test 4: Very large request still succeeds
   {
-    console.log("\n--- Test 4: Oversized request rejected before payment ---");
+    console.log("\n--- Test 4: Very large request succeeds ---");
     modelCalls.length = 0;
     paymentAttempts.length = 0;
 
-    // Create a HUGE request that can't be compressed enough (300KB)
+    // Create a large request (300KB)
     const hugeContent = "x".repeat(300 * 1024);
 
     const res = await fetch(`${proxy.baseUrl}/v1/chat/completions`, {
@@ -281,16 +256,8 @@ async function runTests() {
       }),
     });
 
-    assert(!res.ok, `Oversized request rejected: ${res.status}`);
-    assert(res.status === 413, `Returns 413 status: ${res.status}`);
-    assert(paymentAttempts.length === 0, "ZERO payment attempts made");
-    assert(modelCalls.length === 0, "ZERO models called");
-
-    const data = (await res.json()) as { error?: { type?: string; message?: string } };
-    assert(
-      data.error?.type === "request_too_large",
-      `Error type is request_too_large: ${data.error?.type}`,
-    );
+    assert(res.ok, `Large request succeeds: ${res.status}`);
+    assert(modelCalls.length > 0, "At least one model called");
   }
 
   // Cleanup
