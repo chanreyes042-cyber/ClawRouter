@@ -145,9 +145,11 @@ export class RequestDeduplicator {
     if (entry) {
       // Resolve waiters with a sentinel error response so they don't hang forever.
       // Waiters will see a 503 and can retry on their own.
-      const errorBody = Buffer.from(JSON.stringify({
-        error: { message: "Original request failed, please retry", type: "dedup_origin_failed" },
-      }));
+      const errorBody = Buffer.from(
+        JSON.stringify({
+          error: { message: "Original request failed, please retry", type: "dedup_origin_failed" },
+        }),
+      );
       for (const resolve of entry.resolvers) {
         resolve({
           status: 503,

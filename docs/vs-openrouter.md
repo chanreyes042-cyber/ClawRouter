@@ -6,14 +6,14 @@ OpenRouter is a popular LLM routing service. Here's why ClawRouter is built diff
 
 **OpenRouter is built for developers. ClawRouter is built for agents.**
 
-| Aspect | OpenRouter | ClawRouter |
-|--------|------------|------------|
-| **Setup** | Human creates account, pastes API key | Agent generates wallet, receives funds |
-| **Authentication** | API key (shared secret) | Wallet signature (cryptographic) |
-| **Payment** | Prepaid balance (custodial) | Per-request USDC (non-custodial) |
-| **Routing** | Server-side, proprietary | Client-side, open source, <1ms |
-| **Rate limits** | Per-key quotas | None (your wallet, your limits) |
-| **Empty balance** | Request fails | Auto-fallback to free tier |
+| Aspect             | OpenRouter                            | ClawRouter                             |
+| ------------------ | ------------------------------------- | -------------------------------------- |
+| **Setup**          | Human creates account, pastes API key | Agent generates wallet, receives funds |
+| **Authentication** | API key (shared secret)               | Wallet signature (cryptographic)       |
+| **Payment**        | Prepaid balance (custodial)           | Per-request USDC (non-custodial)       |
+| **Routing**        | Server-side, proprietary              | Client-side, open source, <1ms         |
+| **Rate limits**    | Per-key quotas                        | None (your wallet, your limits)        |
+| **Empty balance**  | Request fails                         | Auto-fallback to free tier             |
 
 ---
 
@@ -73,13 +73,13 @@ Agent-Native Flow (Fully autonomous):
   Agent → generates wallet → receives USDC → pays per request → runs
 ```
 
-| Capability | OpenRouter | ClawRouter |
-|------------|------------|------------|
-| **Account creation** | Requires human | Agent generates wallet |
-| **Authentication** | Shared secret (API key) | Cryptographic signature |
-| **Payment** | Human prepays balance | Agent pays per request |
-| **Funds custody** | They hold your money | You hold your keys |
-| **Empty balance** | Request fails | Auto-fallback to free tier |
+| Capability           | OpenRouter              | ClawRouter                 |
+| -------------------- | ----------------------- | -------------------------- |
+| **Account creation** | Requires human          | Agent generates wallet     |
+| **Authentication**   | Shared secret (API key) | Cryptographic signature    |
+| **Payment**          | Human prepays balance   | Agent pays per request     |
+| **Funds custody**    | They hold your money    | You hold your keys         |
+| **Empty balance**    | Request fails           | Auto-fallback to free tier |
 
 ### The x402 Difference
 
@@ -92,6 +92,7 @@ No accounts. No API keys. No human intervention.
 ```
 
 **Agents can:**
+
 - Spawn with a fresh wallet
 - Receive funds programmatically
 - Pay for exactly what they use

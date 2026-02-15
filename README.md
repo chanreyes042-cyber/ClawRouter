@@ -335,14 +335,14 @@ Track your savings with `/stats` in any OpenClaw conversation.
 
 They're built for developers. ClawRouter is built for **agents**.
 
-|             | OpenRouter / LiteLLM        | ClawRouter                       |
-| ----------- | --------------------------- | -------------------------------- |
-| **Setup**   | Human creates account       | Agent generates wallet           |
-| **Auth**    | API key (shared secret)     | Wallet signature (cryptographic) |
-| **Payment** | Prepaid balance (custodial) | Per-request (non-custodial)      |
-| **Routing** | Proprietary / closed        | Open source, client-side         |
-| **Rate limits** | Per-key quotas          | None (your wallet, your limits)  |
-| **Cost**    | $25/M (Opus equivalent)     | $2.05/M blended average          |
+|                 | OpenRouter / LiteLLM        | ClawRouter                       |
+| --------------- | --------------------------- | -------------------------------- |
+| **Setup**       | Human creates account       | Agent generates wallet           |
+| **Auth**        | API key (shared secret)     | Wallet signature (cryptographic) |
+| **Payment**     | Prepaid balance (custodial) | Per-request (non-custodial)      |
+| **Routing**     | Proprietary / closed        | Open source, client-side         |
+| **Rate limits** | Per-key quotas              | None (your wallet, your limits)  |
+| **Cost**        | $25/M (Opus equivalent)     | $2.05/M blended average          |
 
 Agents shouldn't need a human to paste API keys. They should generate a wallet, receive funds, and pay per request — programmatically.
 
@@ -350,13 +350,13 @@ Agents shouldn't need a human to paste API keys. They should generate a wallet, 
 
 Based on [50+ OpenClaw issues](https://github.com/openclaw/openclaw/issues?q=openrouter):
 
-| Issue | Problem | ClawRouter |
-|-------|---------|------------|
-| [#11202](https://github.com/openclaw/openclaw/issues/11202) | API keys leaked in every LLM prompt | No API keys to leak |
-| [#2373](https://github.com/openclaw/openclaw/issues/2373) | `openrouter/auto` path broken | `blockrun/auto` just works |
-| [#8615](https://github.com/openclaw/openclaw/issues/8615) | Single API key rate limit hell | Non-custodial, no limits |
-| [#2963](https://github.com/openclaw/openclaw/issues/2963) | Tool calling fails silently | Full tool support |
-| [#10687](https://github.com/openclaw/openclaw/issues/10687) | "Unknown model" errors | 30+ models, auto-update |
+| Issue                                                       | Problem                             | ClawRouter                 |
+| ----------------------------------------------------------- | ----------------------------------- | -------------------------- |
+| [#11202](https://github.com/openclaw/openclaw/issues/11202) | API keys leaked in every LLM prompt | No API keys to leak        |
+| [#2373](https://github.com/openclaw/openclaw/issues/2373)   | `openrouter/auto` path broken       | `blockrun/auto` just works |
+| [#8615](https://github.com/openclaw/openclaw/issues/8615)   | Single API key rate limit hell      | Non-custodial, no limits   |
+| [#2963](https://github.com/openclaw/openclaw/issues/2963)   | Tool calling fails silently         | Full tool support          |
+| [#10687](https://github.com/openclaw/openclaw/issues/10687) | "Unknown model" errors              | 30+ models, auto-update    |
 
 **[Full comparison →](docs/vs-openrouter.md)**
 
