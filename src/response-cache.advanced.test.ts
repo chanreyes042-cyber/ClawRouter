@@ -120,7 +120,13 @@ describe("ResponseCache Advanced Edge Cases", () => {
           {
             role: "assistant",
             content: null,
-            tool_calls: [{ id: "call_123", type: "function", function: { name: "get_weather", arguments: "{}" } }],
+            tool_calls: [
+              {
+                id: "call_123",
+                type: "function",
+                function: { name: "get_weather", arguments: "{}" },
+              },
+            ],
           },
           { role: "tool", tool_call_id: "call_123", content: "Sunny, 72°F" },
         ],
@@ -254,7 +260,7 @@ describe("ResponseCache Advanced Edge Cases", () => {
             if (i % 10 === 0) {
               cache.getStats();
             }
-          })()
+          })(),
         );
       }
 
@@ -300,7 +306,7 @@ describe("ResponseCache Advanced Edge Cases", () => {
             headers: {},
             model: "gpt-4",
           },
-          i + 1 // TTL from 1 to 100 seconds
+          i + 1, // TTL from 1 to 100 seconds
         );
       }
 
@@ -327,18 +333,10 @@ describe("ResponseCache Advanced Edge Cases", () => {
       vi.useFakeTimers();
 
       // Set with short TTL
-      cache.set(
-        "key",
-        { body: Buffer.from("v1"), status: 200, headers: {}, model: "gpt-4" },
-        10
-      );
+      cache.set("key", { body: Buffer.from("v1"), status: 200, headers: {}, model: "gpt-4" }, 10);
 
       // Update with longer TTL
-      cache.set(
-        "key",
-        { body: Buffer.from("v2"), status: 200, headers: {}, model: "gpt-4" },
-        100
-      );
+      cache.set("key", { body: Buffer.from("v2"), status: 200, headers: {}, model: "gpt-4" }, 100);
 
       // Advance past first TTL
       vi.advanceTimersByTime(50 * 1000);
@@ -569,19 +567,19 @@ describe("ResponseCache Advanced Edge Cases", () => {
       smallCache.set(
         "short-ttl",
         { body: Buffer.from("short"), status: 200, headers: {}, model: "gpt-4" },
-        1
+        1,
       );
 
       // Add items with long TTL
       smallCache.set(
         "long-ttl-1",
         { body: Buffer.from("long1"), status: 200, headers: {}, model: "gpt-4" },
-        600
+        600,
       );
       smallCache.set(
         "long-ttl-2",
         { body: Buffer.from("long2"), status: 200, headers: {}, model: "gpt-4" },
-        600
+        600,
       );
 
       // Expire short TTL item
@@ -591,7 +589,7 @@ describe("ResponseCache Advanced Edge Cases", () => {
       smallCache.set(
         "new",
         { body: Buffer.from("new"), status: 200, headers: {}, model: "gpt-4" },
-        600
+        600,
       );
 
       // Long TTL items should still exist
@@ -622,9 +620,7 @@ describe("ResponseCache Advanced Edge Cases", () => {
     it("should handle arrays with mixed types", () => {
       const body = JSON.stringify({
         model: "gpt-4",
-        messages: [
-          { role: "user", content: [1, "two", true, null, { nested: "obj" }, [1, 2, 3]] },
-        ],
+        messages: [{ role: "user", content: [1, "two", true, null, { nested: "obj" }, [1, 2, 3]] }],
       });
 
       expect(ResponseCache.generateKey(body)).toHaveLength(32);

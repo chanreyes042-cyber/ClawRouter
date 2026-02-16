@@ -81,7 +81,7 @@ describe("ResponseCache", () => {
         JSON.stringify({
           model: "gpt-4",
           messages: [{ role: "user", content: "hello" }],
-        })
+        }),
       );
 
       expect(ResponseCache.generateKey(body)).toHaveLength(32);

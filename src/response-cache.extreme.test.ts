@@ -15,7 +15,7 @@ describe("ResponseCache Extreme Edge Cases", () => {
       cache.set(
         "nan-ttl",
         { body: Buffer.from("test"), status: 200, headers: {}, model: "gpt-4" },
-        NaN
+        NaN,
       );
 
       // NaN TTL should result in NaN expiresAt, which fails all comparisons
@@ -34,7 +34,7 @@ describe("ResponseCache Extreme Edge Cases", () => {
       cache.set(
         "inf-ttl",
         { body: Buffer.from("test"), status: 200, headers: {}, model: "gpt-4" },
-        Infinity
+        Infinity,
       );
 
       // Advance very far
@@ -53,7 +53,7 @@ describe("ResponseCache Extreme Edge Cases", () => {
       cache.set(
         "neg-inf-ttl",
         { body: Buffer.from("test"), status: 200, headers: {}, model: "gpt-4" },
-        -Infinity
+        -Infinity,
       );
 
       // Should be immediately expired
@@ -66,7 +66,7 @@ describe("ResponseCache Extreme Edge Cases", () => {
       cache.set(
         "max-int-ttl",
         { body: Buffer.from("test"), status: 200, headers: {}, model: "gpt-4" },
-        Number.MAX_SAFE_INTEGER
+        Number.MAX_SAFE_INTEGER,
       );
 
       expect(cache.get("max-int-ttl")).toBeDefined();
@@ -345,7 +345,8 @@ describe("ResponseCache Extreme Edge Cases", () => {
     });
 
     it("should handle unicode escape sequences", () => {
-      const body = '{"model":"gpt-4","messages":[{"role":"user","content":"\\u0048\\u0065\\u006c\\u006c\\u006f"}]}';
+      const body =
+        '{"model":"gpt-4","messages":[{"role":"user","content":"\\u0048\\u0065\\u006c\\u006c\\u006f"}]}';
       expect(ResponseCache.generateKey(body)).toHaveLength(32);
     });
   });
@@ -363,7 +364,9 @@ describe("ResponseCache Extreme Edge Cases", () => {
       // Regex only strips ONE timestamp from the start
       const body1 = JSON.stringify({
         model: "gpt-4",
-        messages: [{ role: "user", content: "[Mon 2024-01-15 10:30 PST] [Tue 2024-01-16 11:00 UTC] hello" }],
+        messages: [
+          { role: "user", content: "[Mon 2024-01-15 10:30 PST] [Tue 2024-01-16 11:00 UTC] hello" },
+        ],
       });
       const body2 = JSON.stringify({
         model: "gpt-4",
@@ -622,12 +625,16 @@ describe("ResponseCache Extreme Edge Cases", () => {
 
       // Add multiple items with same TTL
       for (let i = 0; i < 10; i++) {
-        cache.set(`same-ttl-${i}`, {
-          body: Buffer.from(`value-${i}`),
-          status: 200,
-          headers: {},
-          model: "gpt-4",
-        }, 60);
+        cache.set(
+          `same-ttl-${i}`,
+          {
+            body: Buffer.from(`value-${i}`),
+            status: 200,
+            headers: {},
+            model: "gpt-4",
+          },
+          60,
+        );
       }
 
       expect(cache.getStats().size).toBe(10);
@@ -648,12 +655,16 @@ describe("ResponseCache Extreme Edge Cases", () => {
 
       // Rapidly update same key with different TTLs
       for (let i = 1; i <= 100; i++) {
-        cache.set("rapid-update", {
-          body: Buffer.from(`value-${i}`),
-          status: 200,
-          headers: {},
-          model: "gpt-4",
-        }, i);
+        cache.set(
+          "rapid-update",
+          {
+            body: Buffer.from(`value-${i}`),
+            status: 200,
+            headers: {},
+            model: "gpt-4",
+          },
+          i,
+        );
       }
 
       // Should have latest value with TTL=100

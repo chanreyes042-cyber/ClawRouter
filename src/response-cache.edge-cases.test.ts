@@ -77,7 +77,7 @@ describe("ResponseCache Edge Cases", () => {
     it("should handle special characters in content", () => {
       const body = JSON.stringify({
         model: "gpt-4",
-        messages: [{ role: "user", content: "line1\nline2\ttab\\backslash\"quote" }],
+        messages: [{ role: "user", content: 'line1\nline2\ttab\\backslash"quote' }],
       });
       expect(ResponseCache.generateKey(body)).toHaveLength(32);
     });
@@ -270,7 +270,7 @@ describe("ResponseCache Edge Cases", () => {
           headers: {},
           model: "gpt-4",
         },
-        0
+        0,
       );
 
       // With 0 TTL, should expire immediately on next tick
@@ -292,7 +292,7 @@ describe("ResponseCache Edge Cases", () => {
           headers: {},
           model: "gpt-4",
         },
-        oneYear
+        oneYear,
       );
 
       // Advance 364 days
@@ -317,7 +317,7 @@ describe("ResponseCache Edge Cases", () => {
           headers: {},
           model: "gpt-4",
         },
-        -100
+        -100,
       );
 
       // Negative TTL means already expired
@@ -337,7 +337,7 @@ describe("ResponseCache Edge Cases", () => {
           headers: {},
           model: "gpt-4",
         },
-        0.5 // 500ms
+        0.5, // 500ms
       );
 
       vi.advanceTimersByTime(400);

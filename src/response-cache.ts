@@ -110,7 +110,7 @@ export class ResponseCache {
   constructor(config: ResponseCacheConfig = {}) {
     // Filter out undefined values so they don't override defaults
     const filtered = Object.fromEntries(
-      Object.entries(config).filter(([, v]) => v !== undefined)
+      Object.entries(config).filter(([, v]) => v !== undefined),
     ) as ResponseCacheConfig;
     this.config = { ...DEFAULT_CONFIG, ...filtered };
   }

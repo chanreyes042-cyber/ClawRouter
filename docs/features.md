@@ -29,16 +29,17 @@ Request: "What is 2+2?"
 
 **Features:**
 
-| Feature | Default | Description |
-|---------|---------|-------------|
-| TTL | 10 minutes | Responses expire after TTL |
-| Max size | 200 entries | LRU eviction when full |
-| Item limit | 1MB | Large responses skipped |
-| Auto-enabled | Yes | No config needed |
+| Feature      | Default     | Description                |
+| ------------ | ----------- | -------------------------- |
+| TTL          | 10 minutes  | Responses expire after TTL |
+| Max size     | 200 entries | LRU eviction when full     |
+| Item limit   | 1MB         | Large responses skipped    |
+| Auto-enabled | Yes         | No config needed           |
 
 **Cache key generation:**
 
 The cache key is a SHA-256 hash of the request body (model + messages + params), with normalization:
+
 - Message timestamps stripped (OpenClaw injects `[Mon 2024-01-15 10:30 UTC]`)
 - Keys sorted for consistent hashing
 - Stream mode, user, and request_id fields excluded
@@ -66,6 +67,7 @@ curl http://localhost:8402/cache
 ```
 
 Response:
+
 ```json
 {
   "size": 42,
@@ -85,10 +87,10 @@ Response caching is enabled by default with sensible defaults. For advanced tuni
 import { ResponseCache } from "@blockrun/clawrouter";
 
 const cache = new ResponseCache({
-  maxSize: 500,        // Max cached responses
-  defaultTTL: 300,     // 5 minutes
+  maxSize: 500, // Max cached responses
+  defaultTTL: 300, // 5 minutes
   maxItemSize: 2_097_152, // 2MB max per item
-  enabled: true
+  enabled: true,
 });
 ```
 
