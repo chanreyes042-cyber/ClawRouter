@@ -363,6 +363,20 @@ Based on [50+ OpenClaw issues](https://github.com/openclaw/openclaw/issues?q=ope
 
 ---
 
+## Why did we build this
+
+- **Agents need to pay and get paid — without humans in the loop.** Today's AI infra requires accounts, API keys, manual billing. But an agent spawning 50 sub-agents shouldn't need a human to provision 50 keys. An agent completing a bounty shouldn't wait for someone to invoice and collect.
+
+- **Payment IS authentication.** A wallet signature proves you can pay — no shared secrets that leak into prompts, no accounts to create, no keys to rotate.
+
+- **Agents should control their own money.** Non-custodial means the agent holds the keys. No platform can freeze funds or change terms overnight.
+
+- **Cost optimization should be automatic.** Agents shouldn't overpay $25/M for "what is 2+2". Smart routing to the cheapest capable model saves 92% on typical workloads.
+
+The result: an agent can generate a wallet, receive funds, call any model, pay per-request, and earn money — all programmatically. **This is agentic commerce.**
+
+---
+
 ## Troubleshooting
 
 Quick checklist:
@@ -430,6 +444,16 @@ Your wallet key remains at `~/.openclaw/blockrun/wallet.key` — back it up befo
 - [ ] Cascade routing — try cheap model first, escalate on low quality
 - [ ] Spend controls — daily/monthly budgets
 - [ ] Remote analytics — cost tracking at blockrun.ai
+
+---
+
+## Support / talk with founders
+
+- [Schedule Demo 👋](https://calendly.com/vickyfu9/30min)
+- [Community Telegram 💭](https://t.me/blockrunAI)
+- [X / Twitter 🐦](https://x.com/BlockRunAI)
+- Telegram 📱 [@bc1max](https://t.me/bc1max)
+- Our email ✉️ vicky@blockrun.ai
 
 ---
 
